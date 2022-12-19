@@ -18,9 +18,16 @@ public enum PanelDirection {
 }
 
 public struct PanelConfig {
-    var minWidth: CGFloat = 240
-    var idealWidth: CGFloat = 280
-    var maxWidth: CGFloat = 320
+    
+    public init(minWidth: CGFloat = 240, idealWidth: CGFloat = 280, maxWidth: CGFloat = 320) {
+        self.minWidth = minWidth
+        self.idealWidth = idealWidth
+        self.maxWidth = maxWidth
+    }
+    
+    var minWidth: CGFloat
+    var idealWidth: CGFloat
+    var maxWidth: CGFloat
 }
 
 // MARK: -

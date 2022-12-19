@@ -10,7 +10,7 @@ import SwiftUI
 /// A container view consisting of left and right sidebar panels that are displayed 1 at a time at the bottom of the screen.
 /// An optional middle view can be provided to display on top of the two
 ///
-struct SingleDoublePanelView<LeftPanelContent: View, RightPanelContent: View, MiddleContent: View>: View {
+public struct SingleDoublePanelView<LeftPanelContent: View, RightPanelContent: View, MiddleContent: View>: View {
         
     /// Set to nil if neither panel should be shown
     @Binding var visiblePanel: PanelSide?

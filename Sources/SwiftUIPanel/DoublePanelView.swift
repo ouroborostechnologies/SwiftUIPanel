@@ -9,7 +9,7 @@ import SwiftUI
 
 /// A container view consisting of a left and right sidebar panels. An optional middle view can be provided to display in between the two
 ///
-struct DoublePanelView<LeftPanelContent: View, RightPanelContent: View, MiddleContent: View>: View {
+public struct DoublePanelView<LeftPanelContent: View, RightPanelContent: View, MiddleContent: View>: View {
     
     // MARK: Left
     

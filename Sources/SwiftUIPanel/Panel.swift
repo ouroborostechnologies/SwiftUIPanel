@@ -14,12 +14,22 @@ public struct Panel<Content: View>: View {
     @GestureState private var dragState = DragState.inactive
     
     /// The percentage of the panel's container height that it is taking up (1.0 = fully open, 0.0 = completely closed)
-    @Binding public var heightFactor: CGFloat
+    @Binding var heightFactor: CGFloat
     
     /// The direction in which the panel can expand
-    public var expandDirection: PanelDirection
+    var expandDirection: PanelDirection
     
-    @ViewBuilder public var content: () -> Content
+    @ViewBuilder var content: () -> Content
+    
+    // MARK: -
+    
+    public init(heightFactor: Binding<CGFloat>, expandDirection: PanelDirection, content: @escaping () -> Content) {
+        self._heightFactor = heightFactor
+        self.expandDirection = expandDirection
+        self.content = content
+    }
+    
+    // MARK: -
     
     public var body: some View {
         GeometryReader { geometry in
