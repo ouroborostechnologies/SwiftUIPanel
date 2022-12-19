@@ -1,3 +1,3 @@
 # SwiftUIPanel
 
-A description of this package.
+An expandable SwiftUI card view and other panel layout templates
