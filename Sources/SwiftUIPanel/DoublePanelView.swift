@@ -60,7 +60,7 @@ public struct DoublePanelView<LeftPanelContent: View, RightPanelContent: View, M
     
     // MARK: -
     
-    var body: some View {
+    public var body: some View {
         HStack(spacing: 0) {
             if showLeftPanel {
                 Panel(heightFactor: $leftPanelHeight, expandDirection: .down, content: leftPanelContent)

@@ -54,7 +54,7 @@ public struct SingleDoublePanelView<LeftPanelContent: View, RightPanelContent: V
     
     // MARK: -
     
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             
             middleContent()
