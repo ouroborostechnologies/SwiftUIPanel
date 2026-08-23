@@ -12,11 +12,15 @@ public extension View {
   /// - Parameters:
   ///   - taskbar: `nil` hides the taskbar. On iPhone its presence forces the
   ///     sheet to its smallest detent.
+  ///   - secondary: the wide layout's second panel, top-right. Ignored in the
+  ///     sheet and single-panel modes, where the consumer offers its tabs in
+  ///     the primary panel instead (`\.floatingPanelLayoutMode` says which).
   func floatingPanel<Content: View>(
     configuration: FloatingPanelConfiguration = .default,
     tabs: [FloatingPanelTab],
     selection: Binding<FloatingPanelTab.ID>,
     isPanelVisible: Binding<Bool> = .constant(true),
+    secondary: FloatingPanelSecondary? = nil,
     actions: FloatingPanelActions = FloatingPanelActions(),
     taskbar: TemporaryTaskbarContent? = nil,
     @ViewBuilder content: @escaping (FloatingPanelTab.ID) -> Content
@@ -25,6 +29,7 @@ public extension View {
                                    tabs: tabs,
                                    selection: selection,
                                    isPanelVisible: isPanelVisible,
+                                   secondary: secondary,
                                    actions: actions,
                                    taskbar: taskbar,
                                    panelContent: content))
@@ -40,6 +45,7 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
   let tabs: [FloatingPanelTab]
   @Binding var selection: FloatingPanelTab.ID
   @Binding var isPanelVisible: Bool
+  let secondary: FloatingPanelSecondary?
   let actions: FloatingPanelActions
   let taskbar: TemporaryTaskbarContent?
   let panelContent: (FloatingPanelTab.ID) -> PanelContent
@@ -50,6 +56,8 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
   @State private var sheetDrag: CGFloat = 0
   @State private var cornerSize: CGSize?
   @State private var cornerResizeStart: CGSize?
+  @State private var secondarySize: CGSize?
+  @State private var secondaryResizeStart: CGSize?
   @State private var taskbarHeight: CGFloat = 0
 
   static var taskbarGap: CGFloat { 8 }
@@ -58,10 +66,11 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
 
   func body(content: Content) -> some View {
     GeometryReader { geometry in
-      let mode = PlatformIdiom.resolve(override: configuration.layoutModeOverride)
       let safe = geometry.safeAreaInsets
       let full = CGSize(width: geometry.size.width + safe.leading + safe.trailing,
                         height: geometry.size.height + safe.top + safe.bottom)
+      let mode = PlatformIdiom.resolve(override: configuration.layoutModeOverride, width: full.width,
+                                       breakpoints: configuration.layoutBreakpoints)
       let margin = style.edgeMargin(for: mode)
 
       // One full-window stack that ignores the safe area exactly once. Every
@@ -75,10 +84,13 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
           bottomSheetLayout(content: content, full: full, safe: safe, margin: margin)
         case .floatingCorner:
           floatingCornerLayout(content: content, full: full, safe: safe, margin: margin)
+        case .dualCorner:
+          dualCornerLayout(content: content, full: full, safe: safe, margin: margin)
         }
       }
       .frame(width: full.width, height: full.height)
       .ignoresSafeArea()
+      .environment(\.floatingPanelLayoutMode, mode)
     }
   }
 
@@ -212,6 +224,98 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .transition(.move(edge: .leading).combined(with: .opacity))
         .animation(style.animation, value: isPanelVisible)
+    }
+  }
+
+  // MARK: - Wide: both panels
+
+  /// The primary panel top-left, the secondary top-right, the button stack
+  /// and taskbar between them beside the secondary. Each panel resizes from
+  /// the edge facing the content.
+  @ViewBuilder
+  private func dualCornerLayout(content: Content, full: CGSize, safe: EdgeInsets, margin: CGFloat) -> some View {
+    let stackAllowance = configuration.showsMapOverlayButtons ? style.buttonDiameter + margin : 0
+    let availableHeight = full.height - safe.top - safe.bottom - margin * 2
+    let availableWidth = full.width - safe.leading - safe.trailing - margin * 2 - stackAllowance
+    // Each panel may take at most half the room left beside the buttons.
+    let layout = CornerLayout(configuredHeightRange: configuration.cornerPanelHeightRange,
+                              configuredWidthRange: configuration.cornerPanelWidthRange,
+                              availableHeight: availableHeight,
+                              availableWidth: availableWidth / 2)
+    let primary = layout.clamped(cornerSize ?? CGSize(width: configuration.cornerPanelWidth,
+                                                      height: configuration.initialCornerPanelHeight))
+    let second = layout.clamped(secondarySize ?? CGSize(width: configuration.cornerPanelWidth,
+                                                        height: configuration.initialCornerPanelHeight))
+    let secondaryVisible = secondary != nil && secondary?.isVisible.wrappedValue == true
+    let insets = PanelInsets.dualCorner(safeLeading: safe.leading, safeTrailing: safe.trailing, margin: margin,
+                                        primaryWidth: isPanelVisible ? primary.width : nil,
+                                        secondaryWidth: secondaryVisible ? second.width : nil)
+    let panelFrame = CGRect(x: safe.leading + margin, y: safe.top + margin, width: primary.width, height: primary.height)
+
+    content
+      .environment(\.floatingPanelInsets, insets)
+      .preference(key: FloatingPanelGeometryKey.self, value: isPanelVisible ? panelFrame : .zero)
+
+    VStack(alignment: .trailing, spacing: Self.taskbarGap) {
+      if let taskbar {
+        TemporaryTaskbar(style: style, taskbar: taskbar)
+          .transition(.move(edge: .top).combined(with: .opacity))
+      }
+      if configuration.showsMapOverlayButtons {
+        buttonStack
+      }
+    }
+    .padding(.top, safe.top + margin)
+    .padding(.trailing, safe.trailing + margin + (secondaryVisible ? second.width + margin : 0))
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+    .animation(style.animation, value: taskbar?.id)
+    .animation(style.animation, value: secondaryVisible)
+
+    if isPanelVisible {
+      FloatingCornerPanel(style: style, size: primary, tabs: tabs, selection: $selection, content: panelContent,
+                          onResize: { edge, translation, predicted in
+                            resize(edge, translation, predicted, layout: layout, size: primary,
+                                   stored: $cornerSize, start: $cornerResizeStart)
+                          })
+        .padding(.top, safe.top + margin)
+        .padding(.leading, safe.leading + margin)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .transition(.move(edge: .leading).combined(with: .opacity))
+        .animation(style.animation, value: isPanelVisible)
+    }
+
+    if let secondary, secondaryVisible {
+      FloatingCornerPanel(style: style, size: second, tabs: secondary.tabs, selection: secondary.selection,
+                          content: secondary.content,
+                          onResize: { edge, translation, predicted in
+                            resize(edge, translation, predicted, layout: layout, size: second,
+                                   stored: $secondarySize, start: $secondaryResizeStart)
+                          },
+                          resizesFromLeading: true)
+        .padding(.top, safe.top + margin)
+        .padding(.trailing, safe.trailing + margin)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .transition(.move(edge: .trailing).combined(with: .opacity))
+        .animation(style.animation, value: secondaryVisible)
+    }
+  }
+
+  /// One resize rule for both corner panels: width free, height snapping to
+  /// the detents on release.
+  private func resize(_ edge: ResizeEdge, _ translation: CGSize, _ predicted: CGSize?,
+                      layout: CornerLayout, size: CGSize, stored: Binding<CGSize?>, start: Binding<CGSize?>) {
+    let origin = start.wrappedValue ?? size
+    if start.wrappedValue == nil { start.wrappedValue = origin }
+    var resized = layout.clamped(edge.apply(translation, to: origin))
+    if let predicted {
+      if edge.affectsHeight, configuration.cornerPanelSnapsVertically {
+        resized.height = layout.snappedHeight(from: origin.height, predictedTranslation: predicted.height,
+                                              detents: configuration.detents)
+      }
+      start.wrappedValue = nil
+      withAnimation(style.animation) { stored.wrappedValue = resized }
+    } else {
+      stored.wrappedValue = resized
     }
   }
 

@@ -3,8 +3,10 @@ import SwiftUI
 public struct FloatingPanelConfiguration {
 
   public var style: FloatingChromeStyle = .default
-  /// Forces a layout; `nil` resolves from the device idiom.
+  /// Forces a layout; `nil` resolves from the window width.
   public var layoutModeOverride: PanelLayoutMode? = nil
+  /// The widths at which the presentation changes.
+  public var layoutBreakpoints: PanelLayoutBreakpoints = .default
   /// Bottom-sheet resting heights. iPhone only.
   public var detents: [FloatingPanelDetent] = FloatingPanelDetent.defaultSet
   /// The sheet's detent at first appearance. Must be one of `detents`; the
@@ -31,6 +33,26 @@ public struct FloatingPanelConfiguration {
   public init() {}
 
   public static let `default` = FloatingPanelConfiguration()
+}
+
+/// The second panel of the wide layout: top-right, resized from its leading
+/// edge, with its own tabs and visibility. Ignored in the other modes — the
+/// consumer folds its tabs into the primary panel there.
+public struct FloatingPanelSecondary {
+  public var tabs: [FloatingPanelTab]
+  public var selection: Binding<FloatingPanelTab.ID>
+  public var isVisible: Binding<Bool>
+  public var content: (FloatingPanelTab.ID) -> AnyView
+
+  public init<Content: View>(tabs: [FloatingPanelTab],
+                             selection: Binding<FloatingPanelTab.ID>,
+                             isVisible: Binding<Bool> = .constant(true),
+                             @ViewBuilder content: @escaping (FloatingPanelTab.ID) -> Content) {
+    self.tabs = tabs
+    self.selection = selection
+    self.isVisible = isVisible
+    self.content = { AnyView(content($0)) }
+  }
 }
 
 /// One tab of the panel. Ships with a `String` id for simplicity.

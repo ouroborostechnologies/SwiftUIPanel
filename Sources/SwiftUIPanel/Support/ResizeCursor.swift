@@ -30,8 +30,10 @@ struct ResizeCursorModifier: ViewModifier {
   private var position: FrameResizePosition {
     switch edge {
     case .trailing: .trailing
+    case .leading: .leading
     case .bottom: .bottom
     case .bottomTrailing: .bottomTrailing
+    case .bottomLeading: .bottomLeading
     }
   }
 
@@ -39,9 +41,9 @@ struct ResizeCursorModifier: ViewModifier {
   /// closest honest cue for the corner.
   private var legacyCursor: NSCursor {
     switch edge {
-    case .trailing: .resizeLeftRight
+    case .trailing, .leading: .resizeLeftRight
     case .bottom: .resizeUpDown
-    case .bottomTrailing: .crosshair
+    case .bottomTrailing, .bottomLeading: .crosshair
     }
   }
   #endif

@@ -24,3 +24,15 @@ public struct FloatingPanelGeometryKey: PreferenceKey {
   public static var defaultValue: CGRect = .zero
   public static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
 }
+
+/// The presentation the shell resolved, for content that adapts to it.
+public struct FloatingPanelLayoutModeKey: EnvironmentKey {
+  public static let defaultValue: PanelLayoutMode = .floatingCorner
+}
+
+public extension EnvironmentValues {
+  var floatingPanelLayoutMode: PanelLayoutMode {
+    get { self[FloatingPanelLayoutModeKey.self] }
+    set { self[FloatingPanelLayoutModeKey.self] = newValue }
+  }
+}

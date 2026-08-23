@@ -26,6 +26,7 @@ struct BottomSheetPanel<Content: View>: View {
     .frame(maxWidth: .infinity)
     .frame(height: max(displayedHeight, 0))
     .floatingChrome(style, corners: .all)
+    .focusSection()
   }
 
   private var handle: some View {
