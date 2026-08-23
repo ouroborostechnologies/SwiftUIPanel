@@ -1,18 +1,18 @@
 import SwiftUI
 
-/// iPad and Mac: an inspector anchored top-left, resized from its bottom edge.
-/// It floats over the content; it never pushes it.
+/// iPad and Mac: an inspector anchored top-left, resized from its trailing
+/// edge, its bottom edge, or the corner between them. It floats over the
+/// content; it never pushes it.
 struct FloatingCornerPanel<Content: View>: View {
 
   let style: FloatingChromeStyle
-  let width: CGFloat
-  let height: CGFloat
+  let size: CGSize
   let tabs: [FloatingPanelTab]
   @Binding var selection: FloatingPanelTab.ID
   let content: (FloatingPanelTab.ID) -> Content
-  let onResize: (_ translation: CGFloat, _ ended: Bool) -> Void
+  let onResize: (_ edge: ResizeEdge, _ translation: CGSize, _ ended: Bool) -> Void
 
-  static var resizeHandleHeight: CGFloat { 14 }
+  static var gripThickness: CGFloat { 14 }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -20,29 +20,40 @@ struct FloatingCornerPanel<Content: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       Divider()
       FloatingPanelTabBar(tabs: tabs, selection: $selection)
-      resizeHandle
+        .padding(.bottom, Self.gripThickness - 4)
     }
-    .frame(width: width, height: height)
+    .frame(width: size.width, height: size.height)
     .floatingChrome(style, corners: .all)
+    .overlay(alignment: .trailing) { grip(.trailing) }
+    .overlay(alignment: .bottom) { grip(.bottom) }
+    .overlay(alignment: .bottomTrailing) { grip(.bottomTrailing) }
   }
 
-  private var resizeHandle: some View {
-    Capsule()
-      .fill(.tertiary)
-      .frame(width: 36, height: 4)
-      .frame(maxWidth: .infinity)
-      .frame(height: Self.resizeHandleHeight)
-      .contentShape(Rectangle())
-      .gesture(
-        DragGesture(minimumDistance: 1, coordinateSpace: .global)
-          .onChanged { onResize($0.translation.height, false) }
-          .onEnded { onResize($0.translation.height, true) }
-      )
-      #if os(macOS)
-      .onHover { hovering in
-        if hovering { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+  /// A capsule on the edge, with a wider invisible hit area, a drag gesture,
+  /// and a pointer cue.
+  private func grip(_ edge: ResizeEdge) -> some View {
+    Group {
+      switch edge {
+      case .trailing:
+        Capsule().fill(.tertiary).frame(width: 4, height: 36)
+          .frame(width: Self.gripThickness, height: size.height - Self.gripThickness * 2)
+      case .bottom:
+        Capsule().fill(.tertiary).frame(width: 36, height: 4)
+          .frame(width: size.width - Self.gripThickness * 2, height: Self.gripThickness)
+      case .bottomTrailing:
+        Image(systemName: "arrow.up.left.and.arrow.down.right")
+          .font(.system(size: 8, weight: .bold))
+          .foregroundStyle(.tertiary)
+          .frame(width: Self.gripThickness + 4, height: Self.gripThickness + 4)
       }
-      #endif
-      .accessibilityLabel("Resize panel")
+    }
+    .contentShape(Rectangle())
+    .resizeCursor(edge)
+    .gesture(
+      DragGesture(minimumDistance: 1, coordinateSpace: .global)
+        .onChanged { onResize(edge, $0.translation, false) }
+        .onEnded { onResize(edge, $0.translation, true) }
+    )
+    .accessibilityLabel("Resize panel")
   }
 }

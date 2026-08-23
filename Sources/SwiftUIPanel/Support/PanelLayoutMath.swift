@@ -63,21 +63,50 @@ struct SheetLayout: Equatable {
   }
 }
 
-/// The corner panel's height limits, capped by the window it floats in.
+/// The corner panel's size limits, capped by the window it floats in.
 struct CornerLayout: Equatable {
 
-  let configuredRange: ClosedRange<CGFloat>
+  let configuredHeightRange: ClosedRange<CGFloat>
+  let configuredWidthRange: ClosedRange<CGFloat>
   /// Container height less margins and safe areas.
   let availableHeight: CGFloat
+  /// Container width less margins, safe areas, and the button stack.
+  let availableWidth: CGFloat
 
-  var effectiveRange: ClosedRange<CGFloat> {
-    let lower = max(configuredRange.lowerBound, 0)
-    let upper = max(lower, min(configuredRange.upperBound, availableHeight))
+  var effectiveHeightRange: ClosedRange<CGFloat> { Self.cap(configuredHeightRange, to: availableHeight) }
+  var effectiveWidthRange: ClosedRange<CGFloat> { Self.cap(configuredWidthRange, to: availableWidth) }
+
+  func clampedHeight(_ height: CGFloat) -> CGFloat { Self.clamp(height, to: effectiveHeightRange) }
+  func clampedWidth(_ width: CGFloat) -> CGFloat { Self.clamp(width, to: effectiveWidthRange) }
+
+  func clamped(_ size: CGSize) -> CGSize {
+    CGSize(width: clampedWidth(size.width), height: clampedHeight(size.height))
+  }
+
+  private static func cap(_ range: ClosedRange<CGFloat>, to available: CGFloat) -> ClosedRange<CGFloat> {
+    let lower = max(range.lowerBound, 0)
+    let upper = max(lower, min(range.upperBound, available))
     return lower ... upper
   }
 
-  func clamped(_ height: CGFloat) -> CGFloat {
-    min(max(height, effectiveRange.lowerBound), effectiveRange.upperBound)
+  private static func clamp(_ value: CGFloat, to range: ClosedRange<CGFloat>) -> CGFloat {
+    min(max(value, range.lowerBound), range.upperBound)
+  }
+}
+
+/// Which grip of the corner panel is being dragged.
+enum ResizeEdge {
+  case trailing
+  case bottom
+  case bottomTrailing
+
+  var affectsWidth: Bool { self != .bottom }
+  var affectsHeight: Bool { self != .trailing }
+
+  /// The drag translation applied to the panel's size.
+  func apply(_ translation: CGSize, to start: CGSize) -> CGSize {
+    CGSize(width: start.width + (affectsWidth ? translation.width : 0),
+           height: start.height + (affectsHeight ? translation.height : 0))
   }
 }
 

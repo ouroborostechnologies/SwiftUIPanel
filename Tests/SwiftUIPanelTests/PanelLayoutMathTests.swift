@@ -55,19 +55,41 @@ struct SheetLayoutTests {
 
 @Suite("Corner layout")
 struct CornerLayoutTests {
-  @Test("The window caps the configured maximum")
-  func windowCaps() {
-    let layout = CornerLayout(configuredRange: 160 ... 600, availableHeight: 500)
-    #expect(layout.effectiveRange == 160 ... 500)
-    #expect(layout.clamped(900) == 500)
-    #expect(layout.clamped(10) == 160)
-    #expect(layout.clamped(300) == 300)
+  private func layout(availableHeight: CGFloat = 500, availableWidth: CGFloat = 900) -> CornerLayout {
+    CornerLayout(configuredHeightRange: 160 ... 600, configuredWidthRange: 280 ... 520,
+                 availableHeight: availableHeight, availableWidth: availableWidth)
   }
 
-  @Test("A window shorter than the minimum never inverts the range")
+  @Test("The window caps the configured maximum height")
+  func windowCapsHeight() {
+    #expect(layout().effectiveHeightRange == 160 ... 500)
+    #expect(layout().clampedHeight(900) == 500)
+    #expect(layout().clampedHeight(10) == 160)
+    #expect(layout().clampedHeight(300) == 300)
+  }
+
+  @Test("Width is capped by its own range and by the room beside the button stack")
+  func widthCaps() {
+    #expect(layout().effectiveWidthRange == 280 ... 520)
+    #expect(layout().clampedWidth(800) == 520)
+    #expect(layout(availableWidth: 400).clampedWidth(800) == 400)
+    #expect(layout().clampedWidth(100) == 280)
+  }
+
+  @Test("A window smaller than the minimum never inverts a range")
   func tinyWindow() {
-    let layout = CornerLayout(configuredRange: 160 ... 600, availableHeight: 100)
-    #expect(layout.effectiveRange == 160 ... 160)
+    let tiny = layout(availableHeight: 100, availableWidth: 100)
+    #expect(tiny.effectiveHeightRange == 160 ... 160)
+    #expect(tiny.effectiveWidthRange == 280 ... 280)
+  }
+
+  @Test("Each grip moves only its own axes")
+  func grips() {
+    let start = CGSize(width: 340, height: 420)
+    let drag = CGSize(width: 50, height: -30)
+    #expect(ResizeEdge.trailing.apply(drag, to: start) == CGSize(width: 390, height: 420))
+    #expect(ResizeEdge.bottom.apply(drag, to: start) == CGSize(width: 340, height: 390))
+    #expect(ResizeEdge.bottomTrailing.apply(drag, to: start) == CGSize(width: 390, height: 390))
   }
 }
 

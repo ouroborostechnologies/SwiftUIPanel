@@ -48,8 +48,8 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
   @State private var restingDetent: FloatingPanelDetent?
   /// The live drag, positive downwards. Reset by SwiftUI when the gesture ends.
   @State private var sheetDrag: CGFloat = 0
-  @State private var cornerHeight: CGFloat?
-  @State private var cornerResizeStart: CGFloat?
+  @State private var cornerSize: CGSize?
+  @State private var cornerResizeStart: CGSize?
   @State private var taskbarHeight: CGFloat = 0
 
   static var taskbarGap: CGFloat { 8 }
@@ -135,10 +135,16 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
 
   @ViewBuilder
   private func floatingCornerLayout(content: Content, full: CGSize, safe: EdgeInsets, margin: CGFloat) -> some View {
-    let available = full.height - safe.top - safe.bottom - margin * 2
-    let layout = CornerLayout(configuredRange: configuration.cornerPanelHeightRange, availableHeight: available)
-    let height = layout.clamped(cornerHeight ?? configuration.initialCornerPanelHeight)
-    let width = configuration.cornerPanelWidth
+    // Never taller than the window, never wide enough to reach the button stack.
+    let stackAllowance = configuration.showsMapOverlayButtons ? style.buttonDiameter + margin : 0
+    let layout = CornerLayout(configuredHeightRange: configuration.cornerPanelHeightRange,
+                              configuredWidthRange: configuration.cornerPanelWidthRange,
+                              availableHeight: full.height - safe.top - safe.bottom - margin * 2,
+                              availableWidth: full.width - safe.leading - safe.trailing - margin * 2 - stackAllowance)
+    let size = layout.clamped(cornerSize ?? CGSize(width: configuration.cornerPanelWidth,
+                                                   height: configuration.initialCornerPanelHeight))
+    let width = size.width
+    let height = size.height
     let insets = isPanelVisible
       ? PanelInsets.floatingCorner(safeLeading: safe.leading, margin: margin, width: width)
       : EdgeInsets()
@@ -164,15 +170,14 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
       .overlay(alignment: .topLeading) {
         if isPanelVisible {
           FloatingCornerPanel(style: style,
-                              width: width,
-                              height: height,
+                              size: size,
                               tabs: tabs,
                               selection: $selection,
                               content: panelContent,
-                              onResize: { translation, ended in
-                                let start = cornerResizeStart ?? height
+                              onResize: { edge, translation, ended in
+                                let start = cornerResizeStart ?? size
                                 if cornerResizeStart == nil { cornerResizeStart = start }
-                                cornerHeight = layout.clamped(start + translation)
+                                cornerSize = layout.clamped(edge.apply(translation, to: start))
                                 if ended { cornerResizeStart = nil }
                               })
             .padding(.top, safe.top + margin)

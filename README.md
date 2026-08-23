@@ -5,8 +5,11 @@ in Apple Maps. One component tree, adaptive per idiom:
 
 - **iPhone** — a bottom sheet with detents (`.minimized`, `.half`, `.full`), dragged from its handle
   or the top edge of its content, snapping by projected velocity.
-- **iPad / Mac** — an inspector anchored top-left, resized from its bottom edge (resize cursor on
-  the Mac). It floats over the content and never pushes it.
+- **iPad / Mac** — an inspector anchored top-left, resizable from its trailing edge, bottom edge,
+  and the corner between them, capped by `cornerPanelWidthRange` / `cornerPanelHeightRange` and by
+  the window (it never reaches the button stack). Pointer cues: system frame-resize arrows on
+  macOS 15, `NSCursor` on macOS 14; on iPadOS 17 the pointer snaps onto the grip, since iOS 17
+  has no public resize-arrow shape. It floats over the content and never pushes it.
 
 A **temporary taskbar** shares the chrome: above the sheet on iPhone (forcing it to `.minimized`),
 top-right on iPad and Mac. A column of circular **map buttons** sits top-right, led by the panel's

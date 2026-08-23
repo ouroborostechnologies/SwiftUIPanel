@@ -10,8 +10,11 @@ public struct FloatingPanelConfiguration {
   /// The sheet's detent at first appearance. Must be one of `detents`; the
   /// smallest is used otherwise.
   public var initialDetent: FloatingPanelDetent = .half
-  /// Corner panel width. iPad and Mac only.
+  /// Corner panel width at first appearance. iPad and Mac only.
   public var cornerPanelWidth: CGFloat = 340
+  /// Corner panel width limits; the upper bound is further capped so the
+  /// panel never reaches the button stack.
+  public var cornerPanelWidthRange: ClosedRange<CGFloat> = 280 ... 520
   /// Corner panel height limits; the upper bound is further capped by the
   /// window.
   public var cornerPanelHeightRange: ClosedRange<CGFloat> = 160 ... 600
