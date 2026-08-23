@@ -190,11 +190,22 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
                           tabs: tabs,
                           selection: $selection,
                           content: panelContent,
-                          onResize: { edge, translation, ended in
+                          onResize: { edge, translation, predicted in
                             let start = cornerResizeStart ?? size
                             if cornerResizeStart == nil { cornerResizeStart = start }
-                            cornerSize = layout.clamped(edge.apply(translation, to: start))
-                            if ended { cornerResizeStart = nil }
+                            var resized = layout.clamped(edge.apply(translation, to: start))
+                            if let predicted {
+                              // Released: width stays where it was dropped, height snaps.
+                              if edge.affectsHeight, configuration.cornerPanelSnapsVertically {
+                                resized.height = layout.snappedHeight(from: start.height,
+                                                                      predictedTranslation: predicted.height,
+                                                                      detents: configuration.detents)
+                              }
+                              cornerResizeStart = nil
+                              withAnimation(style.animation) { cornerSize = resized }
+                            } else {
+                              cornerSize = resized
+                            }
                           })
         .padding(.top, safe.top + margin)
         .padding(.leading, safe.leading + margin)

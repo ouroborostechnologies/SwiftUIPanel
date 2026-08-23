@@ -3,6 +3,9 @@ import SwiftUI
 /// iPad and Mac: an inspector anchored top-left, resized from its trailing
 /// edge, its bottom edge, or the corner between them. It floats over the
 /// content; it never pushes it.
+///
+/// The grips draw nothing — the pointer changing is the affordance — and are
+/// only as thick as a comfortable target.
 struct FloatingCornerPanel<Content: View>: View {
 
   let style: FloatingChromeStyle
@@ -10,45 +13,40 @@ struct FloatingCornerPanel<Content: View>: View {
   let tabs: [FloatingPanelTab]
   @Binding var selection: FloatingPanelTab.ID
   let content: (FloatingPanelTab.ID) -> Content
-  let onResize: (_ edge: ResizeEdge, _ translation: CGSize, _ ended: Bool) -> Void
+  /// `predictedTranslation` is non-nil only when the drag ends.
+  let onResize: (_ edge: ResizeEdge, _ translation: CGSize, _ predictedTranslation: CGSize?) -> Void
 
-  static var gripThickness: CGFloat { 14 }
+  static var gripThickness: CGFloat { 10 }
 
   var body: some View {
     PanelTabs(tabs: tabs, selection: $selection, content: content)
-      .padding(.bottom, Self.gripThickness - 4)
-    .frame(width: size.width, height: size.height)
-    .floatingChrome(style, corners: .all)
-    .overlay(alignment: .trailing) { grip(.trailing) }
-    .overlay(alignment: .bottom) { grip(.bottom) }
-    .overlay(alignment: .bottomTrailing) { grip(.bottomTrailing) }
+      .padding(.bottom, 4)
+      .frame(width: size.width, height: size.height)
+      .floatingChrome(style, corners: .all)
+      .overlay(alignment: .trailing) { grip(.trailing) }
+      .overlay(alignment: .bottom) { grip(.bottom) }
+      .overlay(alignment: .bottomTrailing) { grip(.bottomTrailing) }
   }
 
-  /// A capsule on the edge, with a wider invisible hit area, a drag gesture,
-  /// and a pointer cue.
   private func grip(_ edge: ResizeEdge) -> some View {
-    Group {
-      switch edge {
-      case .trailing:
-        Capsule().fill(.tertiary).frame(width: 4, height: 36)
-          .frame(width: Self.gripThickness, height: size.height - Self.gripThickness * 2)
-      case .bottom:
-        Capsule().fill(.tertiary).frame(width: 36, height: 4)
-          .frame(width: size.width - Self.gripThickness * 2, height: Self.gripThickness)
-      case .bottomTrailing:
-        Image(systemName: "arrow.up.left.and.arrow.down.right")
-          .font(.system(size: 8, weight: .bold))
-          .foregroundStyle(.tertiary)
-          .frame(width: Self.gripThickness + 4, height: Self.gripThickness + 4)
-      }
+    Color.clear
+      .frame(width: gripSize(edge).width, height: gripSize(edge).height)
+      .contentShape(Rectangle())
+      .resizeCursor(edge)
+      .gesture(
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+          .onChanged { onResize(edge, $0.translation, nil) }
+          .onEnded { onResize(edge, $0.translation, $0.predictedEndTranslation) }
+      )
+      .accessibilityLabel("Resize panel")
+  }
+
+  private func gripSize(_ edge: ResizeEdge) -> CGSize {
+    let t = Self.gripThickness
+    switch edge {
+    case .trailing: return CGSize(width: t, height: max(size.height - t * 2, 0))
+    case .bottom: return CGSize(width: max(size.width - t * 2, 0), height: t)
+    case .bottomTrailing: return CGSize(width: t * 2, height: t * 2)
     }
-    .contentShape(Rectangle())
-    .resizeCursor(edge)
-    .gesture(
-      DragGesture(minimumDistance: 1, coordinateSpace: .global)
-        .onChanged { onResize(edge, $0.translation, false) }
-        .onEnded { onResize(edge, $0.translation, true) }
-    )
-    .accessibilityLabel("Resize panel")
   }
 }

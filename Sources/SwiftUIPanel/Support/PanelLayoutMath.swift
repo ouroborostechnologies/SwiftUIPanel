@@ -84,6 +84,21 @@ struct CornerLayout: Equatable {
     CGSize(width: clampedWidth(size.width), height: clampedHeight(size.height))
   }
 
+  /// The heights a vertical resize snaps to: the detents applied to the
+  /// available height, clamped into the effective range.
+  func snapHeights(for detents: [FloatingPanelDetent]) -> [CGFloat] {
+    Array(Set(detents.map { clampedHeight($0.fraction * availableHeight) })).sorted()
+  }
+
+  /// Where a vertical resize lands on release — decided by the projected stop
+  /// (`predictedTranslation`), so a flick commits to the next detent even when
+  /// the drag was short. With no detents the height is simply clamped.
+  func snappedHeight(from height: CGFloat, predictedTranslation: CGFloat, detents: [FloatingPanelDetent]) -> CGFloat {
+    let projected = clampedHeight(height + predictedTranslation)
+    let candidates = snapHeights(for: detents)
+    return candidates.min { abs($0 - projected) < abs($1 - projected) } ?? projected
+  }
+
   private static func cap(_ range: ClosedRange<CGFloat>, to available: CGFloat) -> ClosedRange<CGFloat> {
     let lower = max(range.lowerBound, 0)
     let upper = max(lower, min(range.upperBound, available))

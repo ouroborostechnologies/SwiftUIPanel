@@ -20,6 +20,9 @@ public struct FloatingPanelConfiguration {
   public var cornerPanelHeightRange: ClosedRange<CGFloat> = 160 ... 600
   /// Corner panel height at first appearance, clamped to the range.
   public var initialCornerPanelHeight: CGFloat = 420
+  /// Whether a vertical resize of the corner panel snaps, on release, to the
+  /// `detents` applied to its available height. Width always resizes freely.
+  public var cornerPanelSnapsVertically: Bool = true
   public var showsMapOverlayButtons: Bool = true
   public var mapOverlayButtons: [MapOverlayButtonKind] = [.userLocation, .mapStyle]
   /// Whether the show/hide toggle leads the button stack.

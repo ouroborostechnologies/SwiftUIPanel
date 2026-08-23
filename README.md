@@ -8,7 +8,9 @@ in Apple Maps. One component tree, adaptive per idiom:
   margins — so `.full` leaves the Dynamic Island and a sliver of map visible and the handle always
   reachable. Dragged from its handle or the top edge of its content, snapping by projected velocity.
 - **iPad / Mac** — an inspector anchored top-left, resizable from its trailing edge, bottom edge,
-  and the corner between them, capped by `cornerPanelWidthRange` / `cornerPanelHeightRange` and by
+  and the corner between them (the grips draw nothing; the pointer changing is the cue). Height snaps
+  on release to the `detents` applied to its available height, by projected velocity; width resizes
+  freely. Capped by `cornerPanelWidthRange` / `cornerPanelHeightRange` and by
   the window (it never reaches the button stack). Pointer cues: system frame-resize arrows on
   macOS 15, `NSCursor` on macOS 14; on iPadOS 17 the pointer snaps onto the grip, since iOS 17
   has no public resize-arrow shape. It floats over the content and never pushes it.

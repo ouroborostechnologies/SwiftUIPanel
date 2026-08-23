@@ -83,6 +83,18 @@ struct CornerLayoutTests {
     #expect(tiny.effectiveWidthRange == 280 ... 280)
   }
 
+  @Test("A vertical resize snaps to the detents of the available height, by projection")
+  func verticalSnapping() {
+    // Available 500 → minimized 80 (clamped up to 160), half 250, full 500.
+    let layout = layout()
+    #expect(layout.snapHeights(for: FloatingPanelDetent.defaultSet) == [160, 250, 500])
+    #expect(layout.snappedHeight(from: 250, predictedTranslation: 200, detents: FloatingPanelDetent.defaultSet) == 500)
+    #expect(layout.snappedHeight(from: 250, predictedTranslation: -30, detents: FloatingPanelDetent.defaultSet) == 250)
+    #expect(layout.snappedHeight(from: 480, predictedTranslation: -300, detents: FloatingPanelDetent.defaultSet) == 160)
+    // No detents: just clamped.
+    #expect(layout.snappedHeight(from: 300, predictedTranslation: 50, detents: []) == 350)
+  }
+
   @Test("Each grip moves only its own axes")
   func grips() {
     let start = CGSize(width: 340, height: 420)
