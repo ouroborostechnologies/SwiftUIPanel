@@ -115,20 +115,14 @@ enum ResizeEdge {
   case trailing
   case bottom
   case bottomTrailing
-  /// The secondary panel's grips: it hangs from the trailing edge, so
-  /// dragging its leading edge leftwards makes it wider.
-  case leading
-  case bottomLeading
 
   var affectsWidth: Bool { self != .bottom }
-  var affectsHeight: Bool { self != .trailing && self != .leading }
-  var isLeading: Bool { self == .leading || self == .bottomLeading }
+  var affectsHeight: Bool { self != .trailing }
 
   /// The drag translation applied to the panel's size.
   func apply(_ translation: CGSize, to start: CGSize) -> CGSize {
-    let widthDelta = isLeading ? -translation.width : translation.width
-    return CGSize(width: start.width + (affectsWidth ? widthDelta : 0),
-                  height: start.height + (affectsHeight ? translation.height : 0))
+    CGSize(width: start.width + (affectsWidth ? translation.width : 0),
+           height: start.height + (affectsHeight ? translation.height : 0))
   }
 }
 
@@ -149,14 +143,5 @@ enum PanelInsets {
   /// and its own width.
   static func floatingCorner(safeLeading: CGFloat, margin: CGFloat, width: CGFloat) -> EdgeInsets {
     EdgeInsets(top: 0, leading: safeLeading + margin + width, bottom: 0, trailing: 0)
-  }
-
-  /// Two panels cover a column on each edge.
-  static func dualCorner(safeLeading: CGFloat, safeTrailing: CGFloat, margin: CGFloat,
-                         primaryWidth: CGFloat?, secondaryWidth: CGFloat?) -> EdgeInsets {
-    EdgeInsets(top: 0,
-               leading: primaryWidth.map { safeLeading + margin + $0 } ?? 0,
-               bottom: 0,
-               trailing: secondaryWidth.map { safeTrailing + margin + $0 } ?? 0)
   }
 }

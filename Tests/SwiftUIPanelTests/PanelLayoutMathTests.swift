@@ -151,44 +151,28 @@ struct DetentTests {
 }
 
 
-// MARK: - Breakpoints and the wide layout
+// MARK: - Breakpoints
 
-@Suite("Breakpoints and the wide layout")
+@Suite("Breakpoints")
 struct PanelLayoutBreakpointTests {
 
   @Test("The mode follows the window width")
   func modeByWidth() {
-    let breakpoints = PanelLayoutBreakpoints(narrowestFloatingWidth: 700, narrowestDualWidth: 1080)
+    let breakpoints = PanelLayoutBreakpoints(narrowestFloatingWidth: 700)
     #expect(breakpoints.mode(for: 390) == .bottomSheet)
     #expect(breakpoints.mode(for: 699) == .bottomSheet)
     #expect(breakpoints.mode(for: 700) == .floatingCorner)
-    #expect(breakpoints.mode(for: 1079) == .floatingCorner)
-    #expect(breakpoints.mode(for: 1080) == .dualCorner)
+    #expect(breakpoints.mode(for: 2000) == .floatingCorner)
   }
 
-  @Test("An override wins, and a zero width never picks the wide layout")
+  @Test("An override wins, and a zero width falls back to the device's natural mode")
   func overrideAndFallback() {
     var configuration = FloatingPanelConfiguration()
     configuration.layoutModeOverride = .bottomSheet
     #expect(PanelLayoutMode.resolve(width: 2000, configuration: configuration) == .bottomSheet)
     configuration.layoutModeOverride = nil
-    #expect(PanelLayoutMode.resolve(width: 0, configuration: configuration) != .dualCorner)
-  }
-
-  @Test("A leading grip widens the panel when dragged leftwards")
-  func leadingGrip() {
-    let start = CGSize(width: 300, height: 400)
-    #expect(ResizeEdge.leading.apply(CGSize(width: -40, height: 0), to: start).width == 340)
-    #expect(ResizeEdge.bottomLeading.apply(CGSize(width: 20, height: 30), to: start) == CGSize(width: 280, height: 430))
-    #expect(ResizeEdge.trailing.apply(CGSize(width: 20, height: 0), to: start).width == 320)
-  }
-
-  @Test("Dual insets cover both columns, or one when a panel is hidden")
-  func dualInsets() {
-    let insets = PanelInsets.dualCorner(safeLeading: 0, safeTrailing: 0, margin: 16, primaryWidth: 300, secondaryWidth: 260)
-    #expect(insets.leading == 316)
-    #expect(insets.trailing == 276)
-    let onlyPrimary = PanelInsets.dualCorner(safeLeading: 0, safeTrailing: 0, margin: 16, primaryWidth: 300, secondaryWidth: nil)
-    #expect(onlyPrimary.trailing == 0)
+    #if os(macOS)
+    #expect(PanelLayoutMode.resolve(width: 0, configuration: configuration) == .floatingCorner)
+    #endif
   }
 }

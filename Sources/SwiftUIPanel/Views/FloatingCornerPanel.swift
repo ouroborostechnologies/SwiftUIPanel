@@ -15,8 +15,6 @@ struct FloatingCornerPanel<Content: View>: View {
   let content: (FloatingPanelTab.ID) -> Content
   /// `predictedTranslation` is non-nil only when the drag ends.
   let onResize: (_ edge: ResizeEdge, _ translation: CGSize, _ predictedTranslation: CGSize?) -> Void
-  /// A panel hanging from the trailing edge resizes from its leading one.
-  var resizesFromLeading = false
 
   static var gripThickness: CGFloat { 10 }
 
@@ -25,11 +23,9 @@ struct FloatingCornerPanel<Content: View>: View {
       .padding(.bottom, 4)
       .frame(width: size.width, height: size.height)
       .floatingChrome(style, corners: .all)
-      .overlay(alignment: resizesFromLeading ? .leading : .trailing) { grip(resizesFromLeading ? .leading : .trailing) }
+      .overlay(alignment: .trailing) { grip(.trailing) }
       .overlay(alignment: .bottom) { grip(.bottom) }
-      .overlay(alignment: resizesFromLeading ? .bottomLeading : .bottomTrailing) {
-        grip(resizesFromLeading ? .bottomLeading : .bottomTrailing)
-      }
+      .overlay(alignment: .bottomTrailing) { grip(.bottomTrailing) }
       .keyboardFocusSection()
   }
 
@@ -49,9 +45,9 @@ struct FloatingCornerPanel<Content: View>: View {
   private func gripSize(_ edge: ResizeEdge) -> CGSize {
     let t = Self.gripThickness
     switch edge {
-    case .trailing, .leading: return CGSize(width: t, height: max(size.height - t * 2, 0))
+    case .trailing: return CGSize(width: t, height: max(size.height - t * 2, 0))
     case .bottom: return CGSize(width: max(size.width - t * 2, 0), height: t)
-    case .bottomTrailing, .bottomLeading: return CGSize(width: t * 2, height: t * 2)
+    case .bottomTrailing: return CGSize(width: t * 2, height: t * 2)
     }
   }
 }

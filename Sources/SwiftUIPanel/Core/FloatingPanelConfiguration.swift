@@ -35,26 +35,6 @@ public struct FloatingPanelConfiguration {
   public static let `default` = FloatingPanelConfiguration()
 }
 
-/// The second panel of the wide layout: top-right, resized from its leading
-/// edge, with its own tabs and visibility. Ignored in the other modes — the
-/// consumer folds its tabs into the primary panel there.
-public struct FloatingPanelSecondary {
-  public var tabs: [FloatingPanelTab]
-  public var selection: Binding<FloatingPanelTab.ID>
-  public var isVisible: Binding<Bool>
-  public var content: (FloatingPanelTab.ID) -> AnyView
-
-  public init<Content: View>(tabs: [FloatingPanelTab],
-                             selection: Binding<FloatingPanelTab.ID>,
-                             isVisible: Binding<Bool> = .constant(true),
-                             @ViewBuilder content: @escaping (FloatingPanelTab.ID) -> Content) {
-    self.tabs = tabs
-    self.selection = selection
-    self.isVisible = isVisible
-    self.content = { AnyView(content($0)) }
-  }
-}
-
 /// One tab of the panel. Ships with a `String` id for simplicity.
 public struct FloatingPanelTab: Identifiable, Equatable, Hashable, Sendable {
   public let id: String
