@@ -4,22 +4,22 @@ import Testing
 
 @Suite("Sheet layout")
 struct SheetLayoutTests {
-  private let layout = SheetLayout(containerHeight: 800, detents: FloatingPanelDetent.defaultSet)
+  private let layout = SheetLayout(availableHeight: 800, detents: FloatingPanelDetent.defaultSet)
 
   @Test("Detent heights are fractions of the container, sorted ascending")
   func heights() {
-    #expect(layout.height(of: .minimized) == 96)
+    #expect(layout.height(of: .minimized) == 128)
     #expect(layout.height(of: .half) == 400)
-    #expect(layout.height(of: .full) == 784)
+    #expect(layout.height(of: .full) == 800)
     #expect(layout.smallest == .minimized)
     #expect(layout.largest == .full)
-    let shuffled = SheetLayout(containerHeight: 800, detents: [.full, .minimized, .half])
+    let shuffled = SheetLayout(availableHeight: 800, detents: [.full, .minimized, .half])
     #expect(shuffled.detents == [.minimized, .half, .full])
   }
 
   @Test("An empty detent set falls back to half rather than crashing")
   func emptyDetents() {
-    let layout = SheetLayout(containerHeight: 800, detents: [])
+    let layout = SheetLayout(availableHeight: 800, detents: [])
     #expect(layout.detents == [.half])
   }
 
@@ -32,9 +32,9 @@ struct SheetLayoutTests {
   @Test("Past the end detents the sheet rubber-bands")
   func rubberBand() {
     let over = layout.displayedHeight(resting: .full, dragTranslation: -100)
-    #expect(abs(over - (784 + 20)) < 1e-9)
+    #expect(abs(over - (800 + 20)) < 1e-9)
     let under = layout.displayedHeight(resting: .minimized, dragTranslation: 100)
-    #expect(abs(under - (96 - 20)) < 1e-9)
+    #expect(abs(under - (128 - 20)) < 1e-9)
   }
 
   @Test("Snapping follows the projected stop, so a short fast flick changes detent")
@@ -95,12 +95,14 @@ struct CornerLayoutTests {
 
 @Suite("Panel insets")
 struct PanelInsetsTests {
-  @Test("A bottom sheet covers its height, plus a taskbar and the gap")
+  @Test("A bottom sheet covers its clearance and height, plus a taskbar and the gap")
   func bottomSheet() {
     #expect(PanelInsets.bottomSheet(sheetHeight: 300, taskbarHeight: nil, gap: 8).bottom == 300)
+    #expect(PanelInsets.bottomSheet(sheetHeight: 300, taskbarHeight: nil, gap: 8, bottomClearance: 46).bottom == 346)
     #expect(PanelInsets.bottomSheet(sheetHeight: 96, taskbarHeight: 52, gap: 8).bottom == 156)
     #expect(PanelInsets.bottomSheet(sheetHeight: 96, taskbarHeight: 0, gap: 8).bottom == 96)
-    #expect(PanelInsets.bottomSheet(sheetHeight: -5, taskbarHeight: nil, gap: 8).bottom == 0)
+    // A hidden sheet covers nothing, clearance included.
+    #expect(PanelInsets.bottomSheet(sheetHeight: 0, taskbarHeight: nil, gap: 8, bottomClearance: 46).bottom == 0)
   }
 
   @Test("A corner panel covers a leading column and nothing else")

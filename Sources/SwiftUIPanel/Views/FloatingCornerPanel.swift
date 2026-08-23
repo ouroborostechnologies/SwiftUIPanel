@@ -15,13 +15,8 @@ struct FloatingCornerPanel<Content: View>: View {
   static var gripThickness: CGFloat { 14 }
 
   var body: some View {
-    VStack(spacing: 0) {
-      content(selection)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      Divider()
-      FloatingPanelTabBar(tabs: tabs, selection: $selection)
-        .padding(.bottom, Self.gripThickness - 4)
-    }
+    PanelTabs(tabs: tabs, selection: $selection, content: content)
+      .padding(.bottom, Self.gripThickness - 4)
     .frame(width: size.width, height: size.height)
     .floatingChrome(style, corners: .all)
     .overlay(alignment: .trailing) { grip(.trailing) }

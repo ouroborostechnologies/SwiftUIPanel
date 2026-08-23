@@ -3,8 +3,10 @@
 A cross-platform SwiftUI package that recreates the floating panel + map-overlay-button system used
 in Apple Maps. One component tree, adaptive per idiom:
 
-- **iPhone** — a bottom sheet with detents (`.minimized`, `.half`, `.full`), dragged from its handle
-  or the top edge of its content, snapping by projected velocity.
+- **iPhone** — a card floating above the bottom edge, inset from the display on every side, with
+  detents (`.minimized`, `.half`, `.full`) as fractions of the height *inside* the safe area and
+  margins — so `.full` leaves the Dynamic Island and a sliver of map visible and the handle always
+  reachable. Dragged from its handle or the top edge of its content, snapping by projected velocity.
 - **iPad / Mac** — an inspector anchored top-left, resizable from its trailing edge, bottom edge,
   and the corner between them, capped by `cornerPanelWidthRange` / `cornerPanelHeightRange` and by
   the window (it never reaches the button stack). Pointer cues: system frame-resize arrows on
@@ -13,7 +15,8 @@ in Apple Maps. One component tree, adaptive per idiom:
 
 A **temporary taskbar** shares the chrome: above the sheet on iPhone (forcing it to `.minimized`),
 top-right on iPad and Mac. A column of circular **map buttons** sits top-right, led by the panel's
-show/hide toggle. The package is content-agnostic and knows nothing about MapKit; it draws chrome
+show/hide toggle. Tabs are a native `TabView` on iOS and iPadOS; the Mac keeps a bottom tab bar, since
+a `TabView` there can only draw top segmented tabs at these targets. The package is content-agnostic and knows nothing about MapKit; it draws chrome
 and reports intent through closures.
 
 ## Usage

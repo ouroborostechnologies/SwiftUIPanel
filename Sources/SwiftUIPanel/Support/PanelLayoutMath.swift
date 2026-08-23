@@ -1,17 +1,18 @@
 import SwiftUI
 
-/// The bottom sheet's geometry, as pure arithmetic over the container height.
+/// The bottom sheet's geometry, as pure arithmetic over the height available
+/// to it (the container less safe areas and margins).
 ///
 /// Kept out of the views so that detent snapping — the part that decides
 /// whether a sheet "feels right" — is unit-tested rather than eyeballed.
 struct SheetLayout: Equatable {
 
-  let containerHeight: CGFloat
+  let availableHeight: CGFloat
   /// Ascending by fraction.
   let detents: [FloatingPanelDetent]
 
-  init(containerHeight: CGFloat, detents: [FloatingPanelDetent]) {
-    self.containerHeight = containerHeight
+  init(availableHeight: CGFloat, detents: [FloatingPanelDetent]) {
+    self.availableHeight = max(availableHeight, 0)
     let sorted = detents.sorted { $0.fraction < $1.fraction }
     self.detents = sorted.isEmpty ? [.half] : sorted
   }
@@ -20,7 +21,7 @@ struct SheetLayout: Equatable {
   var largest: FloatingPanelDetent { detents[detents.count - 1] }
 
   func height(of detent: FloatingPanelDetent) -> CGFloat {
-    detent.fraction * containerHeight
+    detent.fraction * availableHeight
   }
 
   var minHeight: CGFloat { height(of: smallest) }
@@ -113,9 +114,12 @@ enum ResizeEdge {
 /// What the panel covers, for the content underneath.
 enum PanelInsets {
 
-  /// A bottom sheet covers its own height plus a taskbar stacked above it.
-  static func bottomSheet(sheetHeight: CGFloat, taskbarHeight: CGFloat?, gap: CGFloat) -> EdgeInsets {
-    var bottom = max(sheetHeight, 0)
+  /// A bottom sheet covers, from the content's bottom edge: the safe area and
+  /// margin it floats above, its own height, and a taskbar stacked above it.
+  static func bottomSheet(sheetHeight: CGFloat, taskbarHeight: CGFloat?, gap: CGFloat,
+                          bottomClearance: CGFloat = 0) -> EdgeInsets {
+    guard sheetHeight > 0 || (taskbarHeight ?? 0) > 0 else { return EdgeInsets() }
+    var bottom = bottomClearance + max(sheetHeight, 0)
     if let taskbarHeight, taskbarHeight > 0 { bottom += taskbarHeight + gap }
     return EdgeInsets(top: 0, leading: 0, bottom: bottom, trailing: 0)
   }

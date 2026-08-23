@@ -1,18 +1,15 @@
 import SwiftUI
 
-/// iPhone: an edge-to-edge sheet anchored to the bottom, dragged from its
-/// handle or the top strip of its content, snapping between detents by
-/// projected velocity.
+/// iPhone: a card floating above the bottom edge, inset from the display on
+/// every side, dragged from its handle or the top strip of its content, and
+/// snapping between detents by projected velocity.
 struct BottomSheetPanel<Content: View>: View {
 
   let style: FloatingChromeStyle
-  let layout: SheetLayout
   let tabs: [FloatingPanelTab]
   @Binding var selection: FloatingPanelTab.ID
-  /// The sheet's resting detent. Forced to the smallest while a taskbar is up.
   let displayedHeight: CGFloat
   let isDraggable: Bool
-  let safeAreaBottom: CGFloat
   let content: (FloatingPanelTab.ID) -> Content
   let onDragChanged: (CGFloat) -> Void
   let onDragEnded: (_ predictedTranslation: CGFloat) -> Void
@@ -23,15 +20,12 @@ struct BottomSheetPanel<Content: View>: View {
   var body: some View {
     VStack(spacing: 0) {
       handle
-      content(selection)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      PanelTabs(tabs: tabs, selection: $selection, content: content)
         .overlay(alignment: .top) { topDragZone }
-      FloatingPanelTabBar(tabs: tabs, selection: $selection)
-        .padding(.bottom, safeAreaBottom)
     }
     .frame(maxWidth: .infinity)
     .frame(height: max(displayedHeight, 0))
-    .floatingChrome(style, corners: .top)
+    .floatingChrome(style, corners: .all)
   }
 
   private var handle: some View {
