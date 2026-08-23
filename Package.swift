@@ -1,18 +1,18 @@
 // swift-tools-version: 5.9
-// The swift-tools-version declares the minimum version of Swift required to build this package.
-
 import PackageDescription
 
+// FloatingPanelKit, shipped under the existing `SwiftUIPanel` name so that
+// dependents keep resolving. See README.md for the design spec this follows.
 let package = Package(
     name: "SwiftUIPanel",
     platforms: [
-      .macOS(.v14), .iOS(.v17)
+        .macOS(.v14), .iOS(.v17)
     ],
     products: [
         .library(name: "SwiftUIPanel", targets: ["SwiftUIPanel"])
     ],
-    dependencies: [],
     targets: [
-        .target(name: "SwiftUIPanel", dependencies: [])
+        .target(name: "SwiftUIPanel"),
+        .testTarget(name: "SwiftUIPanelTests", dependencies: ["SwiftUIPanel"])
     ]
 )
