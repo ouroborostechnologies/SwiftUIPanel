@@ -30,7 +30,7 @@ struct FloatingCornerPanel<Content: View>: View {
       .overlay(alignment: resizesFromLeading ? .bottomLeading : .bottomTrailing) {
         grip(resizesFromLeading ? .bottomLeading : .bottomTrailing)
       }
-      .focusSection()
+      .keyboardFocusSection()
   }
 
   private func grip(_ edge: ResizeEdge) -> some View {

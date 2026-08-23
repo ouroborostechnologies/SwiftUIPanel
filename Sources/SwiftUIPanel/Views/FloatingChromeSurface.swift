@@ -37,3 +37,16 @@ extension View {
     modifier(FloatingChromeSurface(style: style, corners: corners))
   }
 }
+
+extension View {
+  /// A keyboard focus section on the Mac; iOS has no equivalent at this
+  /// deployment target and its focus engine orders the panel on its own.
+  @ViewBuilder
+  func keyboardFocusSection() -> some View {
+    #if os(macOS)
+    focusSection()
+    #else
+    self
+    #endif
+  }
+}
