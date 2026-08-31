@@ -8,8 +8,9 @@ import SwiftUI
 /// only as thick as a comfortable target.
 struct FloatingCornerPanel<Content: View>: View {
 
-  let style: FloatingChromeStyle
+  let style: PanelStyle
   let size: CGSize
+  let cornerRadius: CGFloat
   let tabs: [FloatingPanelTab]
   @Binding var selection: FloatingPanelTab.ID
   let content: (FloatingPanelTab.ID) -> Content
@@ -22,7 +23,7 @@ struct FloatingCornerPanel<Content: View>: View {
     PanelTabs(tabs: tabs, selection: $selection, content: content)
       .padding(.bottom, 4)
       .frame(width: size.width, height: size.height)
-      .floatingChrome(style, corners: .all)
+      .floatingChrome(style, radii: .all(cornerRadius))
       .overlay(alignment: .trailing) { grip(.trailing) }
       .overlay(alignment: .bottom) { grip(.bottom) }
       .overlay(alignment: .bottomTrailing) { grip(.bottomTrailing) }

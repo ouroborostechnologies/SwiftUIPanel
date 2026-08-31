@@ -87,7 +87,7 @@ Resolve via `UIDevice.current.userInterfaceIdiom` (iOS/iPadOS) / always `.floati
 - Same `FloatingChromeStyle` as the panel (material, radius, shadow) — reads as a sibling surface, not a separate UI language.
 - Fixed small height (e.g., 44–56pt), horizontally sized to content or matched to panel width per platform rule below.
 - **iOS:** when taskbar is shown, panel auto-transitions to `.minimized` detent. Taskbar appears directly above the panel, same horizontal width and edge alignment as the panel, small gap (~8pt) between them. Both move together as a coordinated group — treat this as one compound "bottom stack" during layout, not two independently-positioned views.
-- **iPadOS / macOS:** taskbar appears top-right of the window, independent of the panel (which stays top-left). Does not affect panel size/position at all on these platforms.
+- **iPadOS / macOS:** taskbar appears top-centre of the window, independent of the panel (which stays top-left) and of the button stack (top-right). It takes the configured `taskbarWidth`, capped by the free strip between the two, and where centring would put it under either surface it slides clear instead of overlapping. Does not affect panel size/position at all on these platforms.
 - Presentation is driven by the consumer (`isPresented: Bool` binding) — the package does not auto-decide *when* to show it, only *how* and *where*.
 
 ---

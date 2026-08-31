@@ -1,23 +1,25 @@
 import SwiftUI
 
 /// The visual language every floating surface shares — panel, taskbar, and
-/// map buttons — so a consumer themes the whole package in one place.
-public struct FloatingChromeStyle {
+/// overlay buttons — so a consumer themes the whole package in one place.
+public struct PanelStyle {
 
   /// The panel's and taskbar's background.
   public var material: Material
-  /// The map buttons' background; lighter, so the map reads through.
+  /// The overlay buttons' background; lighter, so the content reads through.
   public var buttonMaterial: Material
   /// Panel and taskbar corners, continuous style.
   public var cornerRadius: CGFloat
-  /// Map buttons are circles of this diameter.
+  /// Overlay buttons are circles of this diameter, scaled with the user's
+  /// type size.
   public var buttonDiameter: CGFloat
   public var shadowRadius: CGFloat
   public var shadowOpacity: Double
   public var shadowYOffset: CGFloat
-  /// Distance from the safe area on iPhone.
+  /// The chrome's distance from the display's edges on iPhone. Where the
+  /// safe area asks for more (Dynamic Island, home indicator), it wins.
   public var edgeMarginCompact: CGFloat
-  /// Distance from the safe area on iPad and Mac.
+  /// The same, on iPad and Mac.
   public var edgeMarginRegular: CGFloat
   /// Applied to every detent and resize transition.
   public var animation: Animation
@@ -26,7 +28,7 @@ public struct FloatingChromeStyle {
     material: Material = .regularMaterial,
     buttonMaterial: Material = .ultraThinMaterial,
     cornerRadius: CGFloat = 16,
-    buttonDiameter: CGFloat = 44,
+    buttonDiameter: CGFloat = 36,
     shadowRadius: CGFloat = 8,
     shadowOpacity: Double = 0.15,
     shadowYOffset: CGFloat = 2,
@@ -46,9 +48,9 @@ public struct FloatingChromeStyle {
     self.animation = animation
   }
 
-  public static let `default` = FloatingChromeStyle()
+  public static let `default` = PanelStyle()
 
-  func edgeMargin(for mode: PanelLayoutMode) -> CGFloat {
+  func edgeMargin(for mode: LayoutMode) -> CGFloat {
     mode == .bottomSheet ? edgeMarginCompact : edgeMarginRegular
   }
 }

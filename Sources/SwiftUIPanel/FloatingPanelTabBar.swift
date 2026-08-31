@@ -1,22 +1,30 @@
 import SwiftUI
 
 /// Icon-over-label tabs, pinned to the panel's bottom on every platform —
-/// matching Maps rather than the usual Mac sidebar.
+/// rather than the usual Mac sidebar arrangement.
 struct FloatingPanelTabBar: View {
 
   let tabs: [FloatingPanelTab]
   @Binding var selection: FloatingPanelTab.ID
+  /// Fires on every tab press, the already-selected tab included — how a
+  /// collapsed sheet knows to open.
+  var onTap: (() -> Void)? = nil
+
+  /// Semantic fonts plus a scaled slot height, so the bar follows the user's
+  /// type size.
+  @ScaledMetric(relativeTo: .title3) private var iconHeight: CGFloat = 22
 
   var body: some View {
     HStack(spacing: 0) {
       ForEach(tabs) { tab in
         Button {
           selection = tab.id
+          onTap?()
         } label: {
           VStack(spacing: 3) {
             Image(systemName: tab.systemImage)
-              .font(.system(size: 20, weight: .medium))
-              .frame(height: 24)
+              .font(.title3.weight(.medium))
+              .frame(height: iconHeight)
             Text(tab.title)
               .font(.caption2)
           }

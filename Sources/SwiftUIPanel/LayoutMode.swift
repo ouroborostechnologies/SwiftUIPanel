@@ -6,7 +6,7 @@ import SwiftUI
 /// narrow iPad window, and a wide Mac window, and changes only its panel
 /// presentation as the window is resized. The consumer can still force a
 /// mode through the configuration.
-public enum PanelLayoutMode: Sendable, Hashable {
+public enum LayoutMode: Sendable, Hashable {
   /// Narrow: a sheet anchored to the bottom edge with detents.
   case bottomSheet
   /// Regular and wide: one panel anchored top-left, resizable.
@@ -17,7 +17,7 @@ public enum PanelLayoutMode: Sendable, Hashable {
 
   /// The mode a window of `width` points gets. Public so a consumer can make
   /// the same decision — which tabs to offer where — from the same rule.
-  public static func resolve(width: CGFloat, configuration: FloatingPanelConfiguration) -> PanelLayoutMode {
+  public static func resolve(width: CGFloat, configuration: Configuration) -> LayoutMode {
     PlatformIdiom.resolve(override: configuration.layoutModeOverride, width: width, breakpoints: configuration.layoutBreakpoints)
   }
 }
@@ -34,7 +34,7 @@ public struct PanelLayoutBreakpoints: Sendable, Hashable {
 
   public static let `default` = PanelLayoutBreakpoints()
 
-  func mode(for width: CGFloat) -> PanelLayoutMode {
+  func mode(for width: CGFloat) -> LayoutMode {
     width < narrowestFloatingWidth ? .bottomSheet : .floatingCorner
   }
 }

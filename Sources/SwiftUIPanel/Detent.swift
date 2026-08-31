@@ -6,15 +6,16 @@ import CoreGraphics
 ///
 /// Because the fraction is of the *available* height, `.full` still leaves the
 /// top safe area and margin clear — the handle stays reachable and a sliver of
-/// map shows above the sheet.
-public struct FloatingPanelDetent: Equatable, Hashable, Sendable {
+/// content shows above the sheet.
+public struct Detent: Equatable, Hashable, Sendable {
 
-  /// Just the tab bar and a sliver of content; used when a taskbar needs room.
-  public static let minimized = FloatingPanelDetent(fraction: 0.16)
+  /// Fully closed: just the handle and the tab bar, no content. A zero
+  /// fraction resolves to the sheet's measured chrome height, never less.
+  public static let minimized = Detent(fraction: 0)
   /// The default resting state.
-  public static let half = FloatingPanelDetent(fraction: 0.5)
+  public static let half = Detent(fraction: 0.5)
   /// Everything the safe area and margins allow.
-  public static let full = FloatingPanelDetent(fraction: 1)
+  public static let full = Detent(fraction: 1)
 
   public static let defaultSet = [minimized, half, full]
 

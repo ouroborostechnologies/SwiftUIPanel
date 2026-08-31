@@ -27,11 +27,11 @@ public struct FloatingPanelGeometryKey: PreferenceKey {
 
 /// The presentation the shell resolved, for content that adapts to it.
 public struct FloatingPanelLayoutModeKey: EnvironmentKey {
-  public static let defaultValue: PanelLayoutMode = .floatingCorner
+  public static let defaultValue: LayoutMode = .floatingCorner
 }
 
 public extension EnvironmentValues {
-  var floatingPanelLayoutMode: PanelLayoutMode {
+  var floatingPanelLayoutMode: LayoutMode {
     get { self[FloatingPanelLayoutModeKey.self] }
     set { self[FloatingPanelLayoutModeKey.self] = newValue }
   }

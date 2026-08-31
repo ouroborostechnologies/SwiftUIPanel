@@ -2,22 +2,21 @@ import SwiftUI
 
 public extension View {
 
-  /// Overlays a Maps-style floating panel, tab bar, map buttons, and optional
+  /// Overlays a floating panel, tab bar, overlay buttons, and optional
   /// taskbar on this full-bleed content, and publishes what they cover via
   /// `\.floatingPanelInsets` (and `FloatingPanelGeometryKey` for raw frames).
   ///
-  /// Attach it to the map itself — the view that already ignores the safe
-  /// area. The chrome stays inside the safe area on its own.
+  /// Attach it to the content itself — the view that already ignores the
+  /// safe area. The chrome stays inside the safe area on its own.
   ///
   /// - Parameters:
   ///   - taskbar: `nil` hides the taskbar. On iPhone its presence forces the
   ///     sheet to its smallest detent.
   func floatingPanel<Content: View>(
-    configuration: FloatingPanelConfiguration = .default,
+    configuration: Configuration = .default,
     tabs: [FloatingPanelTab],
     selection: Binding<FloatingPanelTab.ID>,
     isPanelVisible: Binding<Bool> = .constant(true),
-    actions: FloatingPanelActions = FloatingPanelActions(),
     taskbar: TemporaryTaskbarContent? = nil,
     @ViewBuilder content: @escaping (FloatingPanelTab.ID) -> Content
   ) -> some View {
@@ -25,7 +24,6 @@ public extension View {
                                    tabs: tabs,
                                    selection: selection,
                                    isPanelVisible: isPanelVisible,
-                                   actions: actions,
                                    taskbar: taskbar,
                                    panelContent: content))
   }
@@ -36,25 +34,28 @@ public extension View {
 /// so the content underneath and the chrome on top can never disagree.
 struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
 
-  let configuration: FloatingPanelConfiguration
+  let configuration: Configuration
   let tabs: [FloatingPanelTab]
   @Binding var selection: FloatingPanelTab.ID
   @Binding var isPanelVisible: Bool
-  let actions: FloatingPanelActions
   let taskbar: TemporaryTaskbarContent?
   let panelContent: (FloatingPanelTab.ID) -> PanelContent
 
   /// The sheet's detent between drags.
-  @State private var restingDetent: FloatingPanelDetent?
+  @State private var restingDetent: Detent?
   /// The live drag, positive downwards. Reset by SwiftUI when the gesture ends.
   @State private var sheetDrag: CGFloat = 0
   @State private var cornerSize: CGSize?
   @State private var cornerResizeStart: CGSize?
   @State private var taskbarHeight: CGFloat = 0
+  /// The sheet's measured handle + tab bar + bottom inset — the height of
+  /// `.minimized`, where only the tab bar shows. The estimate holds for the
+  /// first frame; the measurement replaces it before anything is visible.
+  @State private var sheetChromeHeight: CGFloat = 76
 
   static var taskbarGap: CGFloat { 8 }
 
-  private var style: FloatingChromeStyle { configuration.style }
+  private var style: PanelStyle { configuration.style }
 
   func body(content: Content) -> some View {
     GeometryReader { geometry in
@@ -88,34 +89,51 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
 
   @ViewBuilder
   private func bottomSheetLayout(content: Content, full: CGSize, safe: EdgeInsets, margin: CGFloat) -> some View {
-    // The sheet lives inside the safe area plus a margin on every side, so at
-    // `.full` the Dynamic Island and a sliver of map stay visible and the
-    // handle is always reachable.
-    let bottomClearance = safe.bottom + margin
-    let layout = SheetLayout(availableHeight: full.height - safe.top - bottomClearance - margin,
-                             detents: configuration.detents)
+    // The sheet floats one margin from the display's edges — the bottom gap
+    // is measured from the display, not the safe area, so it reads the same
+    // as the sides; the sheet's *content* keeps clear of the home indicator
+    // instead. The sides use the chrome insets: the margin, unless the safe area
+    // (Dynamic Island in landscape) asks for more. Over its final approach to
+    // `.full` the side and bottom margins dissolve and it goes edge-to-edge;
+    // only the top clearance stays, so a sliver of content remains visible
+    // and the handle stays reachable.
+    let edge = EdgeInsets(chromeSafe: safe, margin: margin)
+    let bottomClearance = margin
+    let layout = SheetLayout(availableHeight: full.height - edge.top - bottomClearance,
+                             detents: configuration.detents,
+                             chromeHeight: sheetChromeHeight)
     let resting = restingDetent ?? (layout.contains(configuration.initialDetent) ? configuration.initialDetent : layout.smallest)
     // One derived state: a taskbar forces the smallest detent and suspends
     // dragging, so the two surfaces never animate against each other.
     let effective = taskbar == nil ? resting : layout.smallest
     let sheetHeight = isPanelVisible ? layout.displayedHeight(resting: effective, dragTranslation: taskbar == nil ? sheetDrag : 0) : 0
+    let progress = layout.fullScreenProgress(displayedHeight: sheetHeight)
+    let leadingInset = edge.leading * (1 - progress)
+    let trailingInset = edge.trailing * (1 - progress)
+    let bottomInset = bottomClearance * (1 - progress)
+    // As the bottom margin collapses the sheet grows to fill the freed space,
+    // so its top edge stays where the detent math put it.
+    let displayedHeight = sheetHeight + bottomClearance * progress
+    // Concentric with the display: inset by the margin, the radius shrinks by
+    // the margin, and edge-to-edge it matches the screen's own curvature.
+    let cornerRadius = ContainerCornerRadius.concentric(inset: min(leadingInset, trailingInset), fallback: style.cornerRadius)
     let insets = PanelInsets.bottomSheet(sheetHeight: sheetHeight,
                                          taskbarHeight: taskbar == nil ? nil : taskbarHeight,
                                          gap: Self.taskbarGap,
                                          bottomClearance: bottomClearance)
-    let sheetFrame = CGRect(x: safe.leading + margin,
+    let sheetFrame = CGRect(x: leadingInset,
                             y: full.height - bottomClearance - sheetHeight,
-                            width: full.width - safe.leading - safe.trailing - margin * 2,
-                            height: sheetHeight)
+                            width: full.width - leadingInset - trailingInset,
+                            height: displayedHeight)
 
     content
       .environment(\.floatingPanelInsets, insets)
       .preference(key: FloatingPanelGeometryKey.self, value: isPanelVisible ? sheetFrame : .zero)
 
-    if configuration.showsMapOverlayButtons {
+    if configuration.showsOverlayButtons {
       buttonStack
-        .padding(.top, safe.top + margin)
-        .padding(.trailing, safe.trailing + margin)
+        .padding(.top, edge.top)
+        .padding(.trailing, edge.trailing)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
     }
 
@@ -123,15 +141,28 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
       if let taskbar {
         TemporaryTaskbar(style: style, taskbar: taskbar)
           .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { taskbarHeight = $0 }
+          .padding(.leading, edge.leading)
+          .padding(.trailing, edge.trailing)
           .transition(.move(edge: .bottom).combined(with: .opacity))
       }
       if isPanelVisible {
         BottomSheetPanel(style: style,
                          tabs: tabs,
                          selection: $selection,
-                         displayedHeight: sheetHeight,
+                         displayedHeight: displayedHeight,
+                         cornerRadius: cornerRadius,
+                         bottomSafeInset: max(safe.bottom - bottomInset, 0),
                          isDraggable: taskbar == nil,
                          content: panelContent,
+                         onChromeHeightChange: { sheetChromeHeight = $0 },
+                         onTabTapped: {
+                           // Fully closed, a tab press opens the sheet — a
+                           // bare tab bar switching invisible content helps
+                           // no one. A taskbar keeps it closed, though; it
+                           // owns the room.
+                           guard taskbar == nil, resting == layout.smallest else { return }
+                           withAnimation(style.animation) { restingDetent = layout.openedFromCollapsed }
+                         },
                          onDragChanged: { sheetDrag = $0 },
                          onDragEnded: { predicted in
                            let next = layout.snappedDetent(resting: resting, predictedTranslation: predicted)
@@ -140,12 +171,14 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
                              sheetDrag = 0
                            }
                          })
+          .padding(.leading, leadingInset)
+          .padding(.trailing, trailingInset)
           .transition(.move(edge: .bottom))
       }
     }
-    .padding(.leading, safe.leading + margin)
-    .padding(.trailing, safe.trailing + margin)
-    .padding(.bottom, bottomClearance)
+    // A lone taskbar has no content inset of its own, so it stays above the
+    // home indicator; the sheet handles the safe area internally.
+    .padding(.bottom, isPanelVisible ? bottomInset : edge.bottom)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
     .animation(style.animation, value: taskbar?.id)
     .animation(style.animation, value: isPanelVisible)
@@ -155,40 +188,61 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
 
   @ViewBuilder
   private func floatingCornerLayout(content: Content, full: CGSize, safe: EdgeInsets, margin: CGFloat) -> some View {
-    // Never taller than the window, never wide enough to reach the button stack.
-    let stackAllowance = configuration.showsMapOverlayButtons ? style.buttonDiameter + margin : 0
+    // One margin from each display edge, grown only where the safe area asks
+    // for more. Never taller than the window, never wide enough to reach the
+    // button stack.
+    let edge = EdgeInsets(chromeSafe: safe, margin: margin)
+    let stackAllowance = configuration.showsOverlayButtons ? style.buttonDiameter + margin : 0
     let layout = CornerLayout(configuredHeightRange: configuration.cornerPanelHeightRange,
                               configuredWidthRange: configuration.cornerPanelWidthRange,
-                              availableHeight: full.height - safe.top - safe.bottom - margin * 2,
-                              availableWidth: full.width - safe.leading - safe.trailing - margin * 2 - stackAllowance)
+                              availableHeight: full.height - edge.top - edge.bottom,
+                              availableWidth: full.width - edge.leading - edge.trailing - stackAllowance)
     let size = layout.clamped(cornerSize ?? CGSize(width: configuration.cornerPanelWidth,
                                                    height: configuration.initialCornerPanelHeight))
+    // Concentric with the container — the display's corners on iPad, the
+    // window's on the Mac — where its curvature allows, else the style's own.
+    let cornerRadius = ContainerCornerRadius.concentric(inset: margin, fallback: style.cornerRadius)
     let insets = isPanelVisible
-      ? PanelInsets.floatingCorner(safeLeading: safe.leading, margin: margin, width: size.width)
+      ? PanelInsets.floatingCorner(leadingInset: edge.leading, width: size.width)
       : EdgeInsets()
-    let panelFrame = CGRect(x: safe.leading + margin, y: safe.top + margin, width: size.width, height: size.height)
+    let panelFrame = CGRect(x: edge.leading, y: edge.top, width: size.width, height: size.height)
 
     content
       .environment(\.floatingPanelInsets, insets)
       .preference(key: FloatingPanelGeometryKey.self, value: isPanelVisible ? panelFrame : .zero)
 
-    VStack(alignment: .trailing, spacing: Self.taskbarGap) {
+    if configuration.showsOverlayButtons {
+      buttonStack
+        .padding(.top, edge.top)
+        .padding(.trailing, edge.trailing)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+    }
+
+    // The taskbar reads as the window's, not the panel's: top centre, sized
+    // from the configuration and capped by the strip left free between the
+    // panel's trailing edge and the button stack. Both gaps are one margin,
+    // so even a taskbar wide enough to fill the strip keeps its distance.
+    let span = TaskbarSpan(containerWidth: full.width,
+                           leading: isPanelVisible ? edge.leading + size.width + margin : edge.leading,
+                           trailing: full.width - edge.trailing - stackAllowance,
+                           preferredWidth: configuration.taskbarWidth)
+
+    ZStack(alignment: .topLeading) {
       if let taskbar {
         TemporaryTaskbar(style: style, taskbar: taskbar)
+          .frame(width: span.width)
+          .padding(.leading, span.originX)
           .transition(.move(edge: .top).combined(with: .opacity))
       }
-      if configuration.showsMapOverlayButtons {
-        buttonStack
-      }
     }
-    .padding(.top, safe.top + margin)
-    .padding(.trailing, safe.trailing + margin)
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+    .padding(.top, edge.top)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .animation(style.animation, value: taskbar?.id)
 
     if isPanelVisible {
       FloatingCornerPanel(style: style,
                           size: size,
+                          cornerRadius: cornerRadius,
                           tabs: tabs,
                           selection: $selection,
                           content: panelContent,
@@ -209,8 +263,8 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
                               cornerSize = resized
                             }
                           })
-        .padding(.top, safe.top + margin)
-        .padding(.leading, safe.leading + margin)
+        .padding(.top, edge.top)
+        .padding(.leading, edge.leading)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .transition(.move(edge: .leading).combined(with: .opacity))
         .animation(style.animation, value: isPanelVisible)
@@ -218,10 +272,9 @@ struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
   }
 
   private var buttonStack: some View {
-    MapOverlayButtonStack(style: style,
-                          kinds: configuration.mapOverlayButtons,
-                          actions: actions,
-                          showsVisibilityToggle: configuration.showsPanelVisibilityToggle,
-                          isPanelVisible: $isPanelVisible)
+    OverlayButtonStack(style: style,
+                       kinds: configuration.overlayButtons,
+                       showsVisibilityToggle: configuration.showsPanelVisibilityToggle,
+                       isPanelVisible: $isPanelVisible)
   }
 }

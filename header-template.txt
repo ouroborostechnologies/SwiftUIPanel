@@ -1,7 +1,0 @@
-//
-// $FILE_NAME
-// $PROJECT_NAME
-//
-// Created by $CREATOR on $FILE_CREATION_DATE.
-// Copyright © $COMPANY_NAME $CURRENT_YEAR
-//
