@@ -69,7 +69,7 @@ public struct PanelVisibilityToggle: View {
   public var body: some View {
     if let controller {
       Button {
-        withAnimation(controller.style.animation) { controller.isPanelVisible.toggle() }
+        controller.isPanelVisible.toggle()
       } label: {
         Image(systemName: controller.layoutMode == .bottomSheet
               ? "rectangle.bottomthird.inset.filled"

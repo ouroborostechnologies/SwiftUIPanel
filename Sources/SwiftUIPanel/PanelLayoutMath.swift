@@ -146,29 +146,22 @@ extension EdgeInsets {
   }
 }
 
-/// What the chrome covers, for the content underneath.
+/// What the panel covers, for the content underneath.
 enum ChromeInsets {
 
-  /// The union of every visible surface, per edge, derived from the same
-  /// frames the surfaces are drawn at — so the two cannot disagree.
+  /// The edge the panel claims, derived from the same frame the panel is drawn
+  /// at — so the two cannot disagree.
   ///
-  /// The toast covers a band at the top on every layout; the panel covers the
-  /// bottom on narrow and a leading column on wide; the button stack covers a
-  /// trailing column. An empty frame is a hidden surface and covers nothing.
-  static func covering(panel: CGRect, toast: CGRect, buttonStack: CGRect,
-                       in container: CGSize, mode: LayoutMode) -> EdgeInsets {
+  /// The panel covers the bottom on narrow and a leading column on wide. Only
+  /// the panel counts: the toast and the button stack float over the content
+  /// rather than displacing it, so showing or hiding either leaves the content
+  /// where it was. An empty frame is a hidden panel and covers nothing.
+  static func covering(panel: CGRect, in container: CGSize, mode: LayoutMode) -> EdgeInsets {
     var insets = EdgeInsets()
-    if !toast.isEmpty {
-      insets.top = toast.maxY
-    }
-    if !panel.isEmpty {
-      switch mode {
-      case .bottomSheet: insets.bottom = container.height - panel.minY
-      case .floatingCorner: insets.leading = panel.maxX
-      }
-    }
-    if !buttonStack.isEmpty {
-      insets.trailing = container.width - buttonStack.minX
+    guard !panel.isEmpty else { return insets }
+    switch mode {
+    case .bottomSheet: insets.bottom = container.height - panel.minY
+    case .floatingCorner: insets.leading = panel.maxX
     }
     return insets
   }

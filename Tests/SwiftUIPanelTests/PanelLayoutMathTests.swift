@@ -119,16 +119,14 @@ struct ChromeInsetsTests {
     #expect(none == EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
   }
 
-  @Test("On narrow, the panel covers the bottom, the toast the top, the stack a column")
+  @Test("On narrow, the panel covers the bottom and nothing else")
   func narrow() {
     let insets = ChromeInsets.covering(
       panel: CGRect(x: 12, y: 600, width: 376, height: 288),
-      toast: CGRect(x: 12, y: 16, width: 376, height: 52),
-      buttonStack: CGRect(x: 340, y: 76, width: 48, height: 120),
       in: container, mode: .bottomSheet)
     #expect(insets.bottom == 300)
-    #expect(insets.top == 68)
-    #expect(insets.trailing == 60)
+    #expect(insets.top == 0)
+    #expect(insets.trailing == 0)
     #expect(insets.leading == 0)
   }
 
@@ -136,19 +134,16 @@ struct ChromeInsetsTests {
   func wide() {
     let insets = ChromeInsets.covering(
       panel: CGRect(x: 16, y: 16, width: 340, height: 500),
-      toast: CGRect(x: 420, y: 16, width: 560, height: 52),
-      buttonStack: CGRect(x: 1336, y: 16, width: 48, height: 200),
       in: CGSize(width: 1400, height: 900), mode: .floatingCorner)
     #expect(insets.leading == 356)
-    #expect(insets.top == 68)
-    #expect(insets.trailing == 64)
+    #expect(insets.top == 0)
+    #expect(insets.trailing == 0)
     #expect(insets.bottom == 0)
   }
 
-  @Test("A hidden surface contributes nothing")
+  @Test("A hidden panel contributes nothing")
   func hidden() {
-    let insets = ChromeInsets.covering(panel: .zero, toast: .zero, buttonStack: .zero,
-                                       in: container, mode: .bottomSheet)
+    let insets = ChromeInsets.covering(panel: .zero, in: container, mode: .bottomSheet)
     #expect(insets == EdgeInsets())
   }
 }

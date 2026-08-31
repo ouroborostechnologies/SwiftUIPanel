@@ -126,10 +126,7 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View, Buttons:
     resolveToast(&layout)
     resolveButtonStack(&layout)
 
-    layout.contentInsets = ChromeInsets.covering(panel: layout.panelFrame,
-                                                 toast: layout.toastFrame,
-                                                 buttonStack: layout.buttonStackFrame,
-                                                 in: container, mode: mode)
+    layout.contentInsets = ChromeInsets.covering(panel: layout.panelFrame, in: container, mode: mode)
     return layout
   }
 
@@ -152,7 +149,8 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View, Buttons:
     layout.sheetBottomInset = bottomClearance * (1 - dissolve)
     // The sheet grows into the space the dissolving bottom margin frees, so its
     // top edge stays where the detent put it.
-    layout.panelHeight = height + bottomClearance * dissolve
+    layout.panelSize = CGSize(width: layout.container.width - layout.sheetLeadingInset - layout.sheetTrailingInset,
+                              height: height + bottomClearance * dissolve)
     layout.barBottomInset = max(layout.safeArea.bottom - layout.sheetBottomInset, 0)
     // Concentric with the container: inset by the margin the radius shrinks by
     // the margin, and edge-to-edge it matches the screen's own curvature.
@@ -160,24 +158,23 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View, Buttons:
       inset: min(layout.sheetLeadingInset, layout.sheetTrailingInset), fallback: style.cornerRadius)
 
     guard controller.isPanelVisible else { return }
-    layout.panelFrame = CGRect(x: layout.sheetLeadingInset,
-                               y: layout.container.height - bottomClearance - height,
-                               width: layout.container.width - layout.sheetLeadingInset - layout.sheetTrailingInset,
-                               height: layout.panelHeight)
+    layout.panelFrame = CGRect(origin: CGPoint(x: layout.sheetLeadingInset,
+                                               y: layout.container.height - bottomClearance - height),
+                               size: layout.panelSize)
   }
 
   private func resolveCornerPanel(_ layout: inout ResolvedLayout) {
     let resting = layout.heights.resolved(controller.detent)
     // Dragging the bottom edge down grows the panel, where dragging a sheet
     // down shrinks it.
-    layout.panelHeight = layout.heights.height(from: resting, draggedBy: -heightDrag)
+    layout.panelSize = CGSize(width: layout.widths.clamped(panelWidth ?? style.panelWidth),
+                              height: layout.heights.height(from: resting, draggedBy: -heightDrag))
     layout.panelCornerRadius = ContainerCornerRadius.concentric(inset: layout.margin,
                                                                 fallback: style.cornerRadius)
 
     guard controller.isPanelVisible else { return }
-    layout.panelFrame = CGRect(x: layout.edge.leading, y: layout.edge.top,
-                               width: layout.widths.clamped(panelWidth ?? style.panelWidth),
-                               height: layout.panelHeight)
+    layout.panelFrame = CGRect(origin: CGPoint(x: layout.edge.leading, y: layout.edge.top),
+                               size: layout.panelSize)
   }
 
   /// The toast belongs to the container on both layouts: the panel's width on
@@ -185,7 +182,6 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View, Buttons:
   /// the strip left free between the panel and the button stack. It keeps its
   /// margins through a sheet's dissolve — the two surfaces are independent.
   private func resolveToast(_ layout: inout ResolvedLayout) {
-    guard controller.isToastVisible else { return }
     let container = layout.container
     let edge = layout.edge
     let margin = layout.margin
@@ -204,6 +200,10 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View, Buttons:
       originX = span.originX
       width = span.width
     }
+    layout.toastOriginX = originX
+    layout.toastWidth = width
+
+    guard controller.isToastVisible else { return }
     layout.toastFrame = CGRect(x: originX, y: edge.top, width: width, height: toastHeight)
   }
 
@@ -224,43 +224,51 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View, Buttons:
 
   // MARK: - Placing what the pass decided
 
-  @ViewBuilder
+  /// The container stays put whether or not the panel does, so the transition
+  /// has something to animate on. An `.animation` inside the branch would be
+  /// torn down with the view it was meant to move.
   private func placePanel(_ layout: ResolvedLayout) -> some View {
-    if controller.isPanelVisible {
-      switch layout.mode {
-      case .bottomSheet:
-        BottomSheetPanel(style: style,
-                         height: layout.panelHeight,
-                         cornerRadius: layout.panelCornerRadius,
-                         barBottomInset: layout.barBottomInset,
-                         main: { main() },
-                         bar: { bar() },
-                         onBarHeightChange: { barHeight = $0 },
-                         onDragChanged: { heightDrag = $0 },
-                         onDragEnded: { settleHeight(layout, projecting: $0) })
-          .padding(.leading, layout.sheetLeadingInset)
-          .padding(.trailing, layout.sheetTrailingInset)
-          .padding(.bottom, layout.sheetBottomInset)
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-          .transition(.move(edge: .bottom))
-          .animation(style.animation, value: controller.isPanelVisible)
-
-      case .floatingCorner:
-        FloatingCornerPanel(style: style,
-                            size: CGSize(width: layout.panelFrame.width, height: layout.panelHeight),
-                            cornerRadius: layout.panelCornerRadius,
-                            main: { main() },
-                            bar: { bar() },
-                            onResize: { edge, translation, projected in
-                              resize(layout, edge: edge, translation: translation, projecting: projected)
-                            })
-          .padding(.top, layout.edge.top)
-          .padding(.leading, layout.edge.leading)
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-          // A slide with no fade: the panel is not disappearing, it is leaving.
-          .transition(.move(edge: .leading))
-          .animation(style.animation, value: controller.isPanelVisible)
+    let alignment: Alignment = layout.mode == .bottomSheet ? .bottom : .topLeading
+    return ZStack(alignment: alignment) {
+      if controller.isPanelVisible {
+        panelBody(layout)
       }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+    .animation(style.animation, value: controller.isPanelVisible)
+  }
+
+  @ViewBuilder
+  private func panelBody(_ layout: ResolvedLayout) -> some View {
+    switch layout.mode {
+    case .bottomSheet:
+      BottomSheetPanel(style: style,
+                       height: layout.panelSize.height,
+                       cornerRadius: layout.panelCornerRadius,
+                       barBottomInset: layout.barBottomInset,
+                       main: { main() },
+                       bar: { bar() },
+                       onBarHeightChange: { barHeight = $0 },
+                       onDragChanged: { heightDrag = $0 },
+                       onDragEnded: { settleHeight(layout, projecting: $0) })
+        .padding(.leading, layout.sheetLeadingInset)
+        .padding(.trailing, layout.sheetTrailingInset)
+        .padding(.bottom, layout.sheetBottomInset)
+        // A slide with no fade: the panel is not disappearing, it is leaving.
+        .transition(.move(edge: .bottom))
+
+    case .floatingCorner:
+      FloatingCornerPanel(style: style,
+                          size: layout.panelSize,
+                          cornerRadius: layout.panelCornerRadius,
+                          main: { main() },
+                          bar: { bar() },
+                          onResize: { edge, translation, projected in
+                            resize(layout, edge: edge, translation: translation, projecting: projected)
+                          })
+        .padding(.top, layout.edge.top)
+        .padding(.leading, layout.edge.leading)
+        .transition(.move(edge: .leading))
     }
   }
 
@@ -269,9 +277,9 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View, Buttons:
     ZStack(alignment: .topLeading) {
       if controller.isToastVisible {
         Toast(style: style) { toast() }
-          .frame(width: layout.toastFrame.width)
+          .frame(width: layout.toastWidth)
           .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { toastHeight = $0 }
-          .padding(.leading, layout.toastFrame.minX)
+          .padding(.leading, layout.toastOriginX)
           .transition(.move(edge: .top).combined(with: .opacity))
       }
     }
@@ -305,7 +313,7 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View, Buttons:
   /// detent and so snaps like a sheet's drag.
   private func resize(_ layout: ResolvedLayout, edge: ResizeEdge,
                       translation: CGSize, projecting projected: CGSize?) {
-    let start = resizeStart ?? CGSize(width: layout.panelFrame.width, height: layout.panelHeight)
+    let start = resizeStart ?? layout.panelSize
     resizeStart = start
 
     if edge.affectsWidth {
@@ -337,8 +345,14 @@ private struct ResolvedLayout {
   let heights: PanelHeights
   let widths: PanelWidths
 
-  var panelHeight: CGFloat = 0
+  /// The size the panel is drawn at, whether or not it is on screen — an
+  /// outgoing panel keeps it, so it slides out at full size rather than
+  /// collapsing to nothing.
+  var panelSize: CGSize = .zero
   var panelCornerRadius: CGFloat = 0
+  /// The same, for the toast.
+  var toastOriginX: CGFloat = 0
+  var toastWidth: CGFloat = 0
   var barBottomInset: CGFloat = 0
   var sheetLeadingInset: CGFloat = 0
   var sheetTrailingInset: CGFloat = 0

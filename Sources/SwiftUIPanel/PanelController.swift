@@ -39,8 +39,9 @@ public final class PanelController {
 
   /// The layout the container's width resolved to.
   public private(set) var layoutMode: LayoutMode = .floatingCorner
-  /// What the chrome covers, per edge — the union of every visible surface.
-  /// Unused edges are zero, and a hidden surface contributes nothing.
+  /// What the panel covers, per edge. Unused edges are zero, and a hidden
+  /// panel contributes nothing. The toast and the button stack float over the
+  /// content rather than displacing it, so neither shows up here.
   ///
   /// It tracks an interactive drag continuously, so content follows the moving
   /// edge instead of jumping when the drag ends.
