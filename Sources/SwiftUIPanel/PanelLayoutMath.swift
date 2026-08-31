@@ -1,142 +1,102 @@
 import SwiftUI
 
-/// The bottom sheet's geometry, as pure arithmetic over the height available
-/// to it (the container less safe areas and margins).
+/// The panel's heights, given the room it has.
 ///
-/// Kept out of the views so that detent snapping — the part that decides
-/// whether a sheet "feels right" — is unit-tested rather than eyeballed.
-struct SheetLayout: Equatable {
+/// Both layouts read it: a detent is the panel's resting height whether it
+/// sheets or floats. Kept out of the views so snapping — the part that decides
+/// whether a panel feels right — is unit-tested rather than eyeballed.
+struct PanelHeights: Equatable {
 
+  /// The container less its safe areas and margins.
   let availableHeight: CGFloat
-  /// Ascending by fraction.
+  /// Ascending by fraction, and never empty.
   let detents: [Detent]
-  /// The measured height of the sheet's chrome — handle, tab bar, bottom
-  /// inset. No detent resolves below it, so `.minimized` (fraction 0) shows
-  /// exactly the chrome and nothing else.
-  let chromeHeight: CGFloat
+  /// The bar slot's measured height. No detent resolves below it, so
+  /// `.minimized` shows exactly the bar.
+  let barHeight: CGFloat
+  private let rubberBandFactor: CGFloat
+  private let dissolveDistance: CGFloat
 
-  init(availableHeight: CGFloat, detents: [Detent], chromeHeight: CGFloat = 0) {
+  init(availableHeight: CGFloat, detents: [Detent], barHeight: CGFloat, style: PanelStyle) {
     self.availableHeight = max(availableHeight, 0)
-    let sorted = detents.sorted { $0.fraction < $1.fraction }
-    self.detents = sorted.isEmpty ? [.half] : sorted
-    self.chromeHeight = max(chromeHeight, 0)
+    let ascending = detents.sorted { $0.fraction < $1.fraction }
+    self.detents = ascending.isEmpty ? [.half] : ascending
+    self.barHeight = max(barHeight, 0)
+    self.rubberBandFactor = style.rubberBandFactor
+    self.dissolveDistance = style.marginDissolveDistance
   }
 
   var smallest: Detent { detents[0] }
   var largest: Detent { detents[detents.count - 1] }
 
+  /// The height `detent` rests at.
   func height(of detent: Detent) -> CGFloat {
-    max(detent.fraction * availableHeight, chromeHeight)
+    max(detent.fraction * availableHeight, barHeight)
   }
 
-  var minHeight: CGFloat { height(of: smallest) }
-  var maxHeight: CGFloat { height(of: largest) }
+  /// `detent` if the set contains it, else the smallest.
+  func resolved(_ detent: Detent) -> Detent {
+    detents.contains(detent) ? detent : smallest
+  }
 
-  /// How far past the end detents the sheet follows a finger. Past the
-  /// limits it moves a fifth as far, like a system sheet.
-  static let rubberBandFactor: CGFloat = 0.2
-
-  /// The sheet's on-screen height while a drag is in progress.
+  /// The height to draw mid-drag, following the finger past the end detents at
+  /// a reduced rate.
   ///
-  /// - Parameter dragTranslation: the gesture's vertical translation, positive
-  ///   downwards (so a finger moving down shrinks the sheet).
-  func displayedHeight(resting: Detent, dragTranslation: CGFloat) -> CGFloat {
-    let raw = height(of: resting) - dragTranslation
-    if raw > maxHeight {
-      return maxHeight + (raw - maxHeight) * Self.rubberBandFactor
-    }
-    if raw < minHeight {
-      return minHeight - (minHeight - raw) * Self.rubberBandFactor
-    }
+  /// - Parameter translation: positive downwards, so a finger moving down
+  ///   shrinks a sheet. A resize of the wide panel's bottom edge, where down
+  ///   grows it, negates it first.
+  func height(from resting: Detent, draggedBy translation: CGFloat) -> CGFloat {
+    let raw = height(of: resting) - translation
+    if raw > maxHeight { return maxHeight + (raw - maxHeight) * rubberBandFactor }
+    if raw < minHeight { return minHeight - (minHeight - raw) * rubberBandFactor }
     return raw
   }
 
-  /// The detent a drag lands on.
+  /// The detent a released drag lands on.
   ///
-  /// Decided by where the sheet *would* stop if it kept its velocity
-  /// (`predictedTranslation`, from `DragGesture.Value.predictedEndTranslation`),
-  /// not by where the finger lifted. A fast flick therefore commits to the
-  /// next detent even when the distance was short — the behaviour people know
-  /// from `UISheetPresentationController`.
-  func snappedDetent(resting: Detent, predictedTranslation: CGFloat) -> Detent {
-    let projected = height(of: resting) - predictedTranslation
-    return detents.min { abs(height(of: $0) - projected) < abs(height(of: $1) - projected) } ?? resting
-  }
-
-  /// Validates a configured detent against the set.
-  func contains(_ detent: Detent) -> Bool {
-    detents.contains(detent)
-  }
-
-  /// Where a tap on the collapsed sheet's tab bar opens it: `.half` when the
-  /// set offers it, else the next detent up from the smallest.
-  var openedFromCollapsed: Detent {
-    contains(.half) ? .half : detents[min(1, detents.count - 1)]
-  }
-
-  /// The height band, below `.full`, across which the side margins collapse.
-  static let edgeCollapseDistance: CGFloat = 64
-
-  /// How far the sheet is into going full screen: 0 through most of its
-  /// travel, rising to 1 over the last `edgeCollapseDistance` points before
-  /// the top detent. Only a detent set that actually reaches `.full` ever
-  /// reports progress — a sheet capped short of the top keeps its margins.
+  /// Decided by where the panel *would* stop if it kept its velocity, not by
+  /// where the finger lifted, so a fast flick commits to the next detent even
+  /// when the distance was short.
   ///
-  /// This is what dissolves the sheet's floating-card margins into an
-  /// edge-to-edge surface, live during the drag.
-  func fullScreenProgress(displayedHeight: CGFloat) -> CGFloat {
-    guard largest.fraction >= 1, maxHeight > Self.edgeCollapseDistance else { return 0 }
-    return min(max(1 - (maxHeight - displayedHeight) / Self.edgeCollapseDistance, 0), 1)
+  /// - Parameter projected: `DragGesture.Value.predictedEndTranslation.height`.
+  func snappedDetent(from resting: Detent, projecting projected: CGFloat) -> Detent {
+    let stop = height(of: resting) - projected
+    return detents.min { abs(height(of: $0) - stop) < abs(height(of: $1) - stop) } ?? resting
+  }
+
+  /// How far a sheet is into going edge-to-edge: 0 through most of its travel,
+  /// rising to 1 over the last `marginDissolveDistance` before the top detent.
+  ///
+  /// A set that stops short of `.full` never reports progress, so a sheet
+  /// capped below the top keeps its margins.
+  func dissolveProgress(atHeight height: CGFloat) -> CGFloat {
+    guard largest.fraction >= 1, maxHeight > dissolveDistance else { return 0 }
+    return min(max(1 - (maxHeight - height) / dissolveDistance, 0), 1)
+  }
+
+  private var minHeight: CGFloat { height(of: smallest) }
+  private var maxHeight: CGFloat { height(of: largest) }
+}
+
+/// The wide panel's widths — the one dimension it resizes freely.
+struct PanelWidths: Equatable {
+
+  let configuredRange: ClosedRange<CGFloat>
+  /// The container less its margins, safe areas, and the button stack.
+  let available: CGFloat
+
+  /// `configuredRange`, capped by the room actually available.
+  var effectiveRange: ClosedRange<CGFloat> {
+    let lower = max(configuredRange.lowerBound, 0)
+    return lower ... max(lower, min(configuredRange.upperBound, available))
+  }
+
+  func clamped(_ width: CGFloat) -> CGFloat {
+    min(max(width, effectiveRange.lowerBound), effectiveRange.upperBound)
   }
 }
 
-/// The corner panel's size limits, capped by the window it floats in.
-struct CornerLayout: Equatable {
-
-  let configuredHeightRange: ClosedRange<CGFloat>
-  let configuredWidthRange: ClosedRange<CGFloat>
-  /// Container height less margins and safe areas.
-  let availableHeight: CGFloat
-  /// Container width less margins, safe areas, and the button stack.
-  let availableWidth: CGFloat
-
-  var effectiveHeightRange: ClosedRange<CGFloat> { Self.cap(configuredHeightRange, to: availableHeight) }
-  var effectiveWidthRange: ClosedRange<CGFloat> { Self.cap(configuredWidthRange, to: availableWidth) }
-
-  func clampedHeight(_ height: CGFloat) -> CGFloat { Self.clamp(height, to: effectiveHeightRange) }
-  func clampedWidth(_ width: CGFloat) -> CGFloat { Self.clamp(width, to: effectiveWidthRange) }
-
-  func clamped(_ size: CGSize) -> CGSize {
-    CGSize(width: clampedWidth(size.width), height: clampedHeight(size.height))
-  }
-
-  /// The heights a vertical resize snaps to: the detents applied to the
-  /// available height, clamped into the effective range.
-  func snapHeights(for detents: [Detent]) -> [CGFloat] {
-    Array(Set(detents.map { clampedHeight($0.fraction * availableHeight) })).sorted()
-  }
-
-  /// Where a vertical resize lands on release — decided by the projected stop
-  /// (`predictedTranslation`), so a flick commits to the next detent even when
-  /// the drag was short. With no detents the height is simply clamped.
-  func snappedHeight(from height: CGFloat, predictedTranslation: CGFloat, detents: [Detent]) -> CGFloat {
-    let projected = clampedHeight(height + predictedTranslation)
-    let candidates = snapHeights(for: detents)
-    return candidates.min { abs($0 - projected) < abs($1 - projected) } ?? projected
-  }
-
-  private static func cap(_ range: ClosedRange<CGFloat>, to available: CGFloat) -> ClosedRange<CGFloat> {
-    let lower = max(range.lowerBound, 0)
-    let upper = max(lower, min(range.upperBound, available))
-    return lower ... upper
-  }
-
-  private static func clamp(_ value: CGFloat, to range: ClosedRange<CGFloat>) -> CGFloat {
-    min(max(value, range.lowerBound), range.upperBound)
-  }
-}
-
-/// Which grip of the corner panel is being dragged.
+/// Which grip of the wide panel is being dragged.
 enum ResizeEdge {
   case trailing
   case bottom
@@ -144,74 +104,72 @@ enum ResizeEdge {
 
   var affectsWidth: Bool { self != .bottom }
   var affectsHeight: Bool { self != .trailing }
+}
 
-  /// The drag translation applied to the panel's size.
-  func apply(_ translation: CGSize, to start: CGSize) -> CGSize {
-    CGSize(width: start.width + (affectsWidth ? translation.width : 0),
-           height: start.height + (affectsHeight ? translation.height : 0))
+/// Where the toast sits along the container's top edge on a wide layout.
+///
+/// It belongs to the container, so it is centred on the container — then slid,
+/// never squeezed, far enough to clear the panel on one side and the button
+/// stack on the other. Only a strip narrower than the toast wants costs it
+/// width.
+struct ToastSpan: Equatable {
+
+  let containerWidth: CGFloat
+  /// The leading edge of the strip left free between the panel and the stack.
+  let stripLeading: CGFloat
+  /// Its trailing edge.
+  let stripTrailing: CGFloat
+  /// The width the toast would take given the room.
+  let preferredWidth: CGFloat
+
+  var width: CGFloat { max(min(preferredWidth, stripTrailing - stripLeading), 0) }
+
+  /// The toast's offset from the container's leading edge.
+  var originX: CGFloat {
+    let centred = (containerWidth - width) / 2
+    return min(max(centred, stripLeading), max(stripTrailing - width, stripLeading))
   }
 }
 
 extension EdgeInsets {
-  /// Where the chrome sits relative to each display edge: one margin from the
-  /// edge, grown only where the safe area itself asks for more (Dynamic
-  /// Island, home indicator, notch). Nothing is device-checked — the safe
-  /// area already encodes the hardware, so the margin reads the same on every
-  /// side that has nothing in the way.
-  init(chromeSafe safe: EdgeInsets, margin: CGFloat) {
-    self.init(top: max(safe.top, margin),
-              leading: max(safe.leading, margin),
-              bottom: max(safe.bottom, margin),
-              trailing: max(safe.trailing, margin))
+
+  /// Where the chrome sits relative to each container edge: one `margin`,
+  /// grown only where `safeArea` asks for more.
+  ///
+  /// Nothing is device-checked — the safe area already encodes the hardware,
+  /// so the margin reads the same on every side with nothing in the way.
+  init(margin: CGFloat, clearing safeArea: EdgeInsets) {
+    self.init(top: max(safeArea.top, margin),
+              leading: max(safeArea.leading, margin),
+              bottom: max(safeArea.bottom, margin),
+              trailing: max(safeArea.trailing, margin))
   }
 }
 
-/// What the panel covers, for the content underneath.
-enum PanelInsets {
+/// What the chrome covers, for the content underneath.
+enum ChromeInsets {
 
-  /// A bottom sheet covers, from the content's bottom edge: the safe area and
-  /// margin it floats above, its own height, and a taskbar stacked above it.
-  /// (At `.full` the sheet absorbs the clearance itself; the total is the same.)
-  static func bottomSheet(sheetHeight: CGFloat, taskbarHeight: CGFloat?, gap: CGFloat,
-                          bottomClearance: CGFloat = 0) -> EdgeInsets {
-    guard sheetHeight > 0 || (taskbarHeight ?? 0) > 0 else { return EdgeInsets() }
-    var bottom = bottomClearance + max(sheetHeight, 0)
-    if let taskbarHeight, taskbarHeight > 0 { bottom += taskbarHeight + gap }
-    return EdgeInsets(top: 0, leading: 0, bottom: bottom, trailing: 0)
-  }
-
-  /// A corner panel covers a column on the leading edge: its inset from the
-  /// display plus its own width.
-  static func floatingCorner(leadingInset: CGFloat, width: CGFloat) -> EdgeInsets {
-    EdgeInsets(top: 0, leading: leadingInset + width, bottom: 0, trailing: 0)
-  }
-}
-
-/// Where the taskbar sits along the top edge, on iPad and Mac.
-///
-/// It belongs to the window rather than to the panel, so it is centred on the
-/// window — then slid, never squeezed, just far enough to stay clear of the
-/// panel on one side and the button stack on the other. Only a strip narrower
-/// than the taskbar wants costs it width.
-struct TaskbarSpan: Equatable {
-
-  /// The full window width the taskbar is centred on.
-  let containerWidth: CGFloat
-  /// The free strip's leading edge: the panel's trailing edge plus its gap,
-  /// or the chrome inset where no panel is showing.
-  let leading: CGFloat
-  /// Its trailing edge: the button stack's leading edge less its gap, or the
-  /// chrome inset where there is no stack.
-  let trailing: CGFloat
-  /// The width the taskbar would take given the room.
-  let preferredWidth: CGFloat
-
-  /// The taskbar's width: what it asks for, capped by the strip.
-  var width: CGFloat { max(min(preferredWidth, trailing - leading), 0) }
-
-  /// Its leading offset from the window's edge.
-  var originX: CGFloat {
-    let centred = (containerWidth - width) / 2
-    return min(max(centred, leading), max(trailing - width, leading))
+  /// The union of every visible surface, per edge, derived from the same
+  /// frames the surfaces are drawn at — so the two cannot disagree.
+  ///
+  /// The toast covers a band at the top on every layout; the panel covers the
+  /// bottom on narrow and a leading column on wide; the button stack covers a
+  /// trailing column. An empty frame is a hidden surface and covers nothing.
+  static func covering(panel: CGRect, toast: CGRect, buttonStack: CGRect,
+                       in container: CGSize, mode: LayoutMode) -> EdgeInsets {
+    var insets = EdgeInsets()
+    if !toast.isEmpty {
+      insets.top = toast.maxY
+    }
+    if !panel.isEmpty {
+      switch mode {
+      case .bottomSheet: insets.bottom = container.height - panel.minY
+      case .floatingCorner: insets.leading = panel.maxX
+      }
+    }
+    if !buttonStack.isEmpty {
+      insets.trailing = container.width - buttonStack.minX
+    }
+    return insets
   }
 }

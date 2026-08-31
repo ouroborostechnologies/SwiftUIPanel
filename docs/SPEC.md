@@ -1,303 +1,605 @@
-# FloatingPanelKit — Design & Implementation Spec
+# SwiftUIPanel — Design & Implementation Spec
 
-A cross-platform (iOS / iPadOS / macOS) SwiftUI package that recreates the
-floating panel + map-overlay-button system used in Apple Maps.
+A cross-platform (iOS / iPadOS / macOS) SwiftUI package that overlays a floating
+panel, a toast, and a stack of buttons on top of a full-bleed content view, and
+publishes the region they leave unobstructed.
 
----
-
-## 1. Design Goals
-
-- One shared component tree, adaptive layout per platform (not three separate implementations).
-- Visual language matches system "floating chrome": `.ultraThinMaterial` / `.regularMaterial`, continuous corner radius, soft shadow, safe-area-aware placement.
-- Panel behavior differs by idiom:
-  - **iOS (iPhone):** bottom sheet, drag-from-top-edge, detents from "minimized" to "full screen."
-  - **iPadOS / macOS:** anchored top-left "inspector" panel, drag-to-resize vertically.
-- A **temporary taskbar** component shares the same chrome and appears contextually, positioned differently per platform.
-- Everything is exposed through a small, opinionated public API — configuration structs and view modifiers, not subclassing.
+The package is **content-agnostic**. It draws chrome, resolves layout, and reports
+geometry. It never inspects, wraps, or owns the content it floats over, and it never
+inspects the content it is handed to put inside its own surfaces.
 
 ---
 
-## 2. Visual Language (shared tokens)
+## 1. Principles
 
-Define once, reused by every floating surface (panel, taskbar, map buttons):
+These three constrain every decision below; where a later section seems to offer a
+choice, these settle it.
 
-| Token | Value (suggested) |
+### 1.1 Content agnosticism
+
+- The **layout engine** has no opinion about what its surfaces contain. No tab model,
+  no button model, no domain enums. Every slot is a `@ViewBuilder`.
+- Opinionated helpers are allowed, but only *above* the engine and never on its
+  required path. The tab layer (§9) is the one such helper: it is built out of the
+  public primitive, adds nothing to the engine, and can be deleted without the panel
+  noticing. Convenience is layered on agnosticism, never mixed into it.
+- No dependency beyond SwiftUI. The package imports no domain framework, and no type
+  or parameter in its API is named after one. A reader of the public API should not
+  be able to tell what kind of app it was built for.
+- The package reports *intent* (a surface was toggled, a size changed) and *geometry*
+  (what is covered). Meaning belongs to the consumer.
+
+### 1.2 No magic numbers, no screen measurements in layout code
+
+Layout code contains no literal point values and no device or screen constants.
+
+- Every point value the design needs is a **named, documented, consumer-overridable
+  property on `PanelStyle`**. `PanelStyle` is the one file where a number is written
+  down. Layout code reads names, never literals.
+- Everything else is **measured or derived**: chrome heights come from
+  `onGeometryChange`, available space from the container's own size, safe areas from
+  the environment. Nothing is estimated from a known device.
+- Proportions that are part of a definition are not magic numbers. `.half` is
+  "half the available height" because half is what the detent *means*, not because
+  0.5 measured well on a particular phone. A consumer's own `Detent(fraction:)` is
+  their number, not one of ours.
+- No `UIDevice`, no screen-size checks, no hardcoded breakpoint literals inline. The
+  breakpoint that separates the two layouts is itself a named style value.
+
+### 1.3 Abstractions need strong justification
+
+A type earns its place by removing more complexity than it adds. Where this spec
+introduces one — `PanelController`, `Detent`, `LayoutMode` — it states what it
+replaces. Where the obvious abstraction is *absent* from the engine — no button type,
+no toast content type — that absence is deliberate and §1.1 is why.
+
+`PanelTab` is the deliberate exception, and it proves the rule: it exists because
+most consumers want tabs, and it is confined to the optional layer precisely so the
+engine can stay ignorant of it.
+
+---
+
+## 2. Terminology
+
+| Term | Meaning |
 |---|---|
-| `cornerRadius` | 16pt (panel/taskbar), continuous style |
-| `buttonCornerRadius` | full circle, 44pt diameter |
-| `material` | `.regularMaterial` (panel), `.ultraThinMaterial` (map buttons) |
-| `shadow` | radius 8, y-offset 2, opacity 0.15 |
-| `edgeMargin` | 12pt from safe area on iPhone, 16pt on iPad/Mac |
-| `dragHandle` | 36×5pt capsule, `.tertiaryLabel`, only on iOS bottom sheet |
-| `animation` | `.spring(response: 0.4, dampingFraction: 0.85)` for all detent/resize transitions |
+| **content** | The consumer's full-bleed view. The package is a modifier on it. |
+| **panel** | The main floating surface. Bottom-anchored on narrow, top-leading on wide. |
+| **bar slot** | The panel's bottom slot. Always visible, at every detent. |
+| **main slot** | The panel's upper slot. Renders nothing when closed. |
+| **toast** | A transient surface, top-centre, sharing the panel's chrome. |
+| **button stack** | A vertical column of consumer views, top-trailing. |
+| **chrome** | The three surfaces together: panel, toast, button stack. |
+| **available height** | Container height less safe areas and edge margins — the room a surface may occupy. |
 
-Ship these as a `FloatingChromeStyle` struct so consumers can theme the whole package in one place (color, material, radius, shadow) rather than per-component.
-
----
-
-## 3. Component Inventory
-
-1. **`FloatingPanel`** — the tabbed container (main sheet/inspector).
-2. **`FloatingPanelTabBar`** — bottom-pinned tab bar inside the panel (icon + label, Maps-style).
-3. **`MapOverlayButtonStack`** — vertical stack of circular buttons, top-right over the map (location, style picker, extensible for more).
-4. **`PanelVisibilityToggle`** — the show/hide button, top-right, independent of the button stack (or optionally merged into it — see §6).
-5. **`TemporaryTaskbar`** — transient, same chrome, low height, platform-dependent placement.
-6. **`FloatingPanelContainer`** — the top-level view that composes all of the above over your map content; this is what a consumer actually drops into their app.
+"Bar slot" and "button stack" are kept distinct on purpose: one is inside the panel,
+one is a separate surface.
 
 ---
 
-## 4. Layout Behavior
+## 3. The Panel
 
-### 4.1 iOS (iPhone) — Bottom Sheet
+### 3.1 Anchoring
 
-- Anchored to bottom edge, full device width minus `edgeMargin` (or edge-to-edge, matching Maps — recommend edge-to-edge with only top corners rounded).
-- **Detents** (customizable, but ship defaults):
-  - `.minimized` — just the tab bar + a sliver of content (~120pt), used when a taskbar needs room.
-  - `.half` — ~50% of screen height (default resting state).
-  - `.full` — expands to cover the full screen (top safe area inset only).
-- Drag gesture recognized on the drag handle **and** the top ~24pt of panel content, so users can drag from the top edge as requested. Use `DragGesture(minimumDistance: 2)` combined with velocity-based detent snapping (mirror `UISheetPresentationController` feel: fast flick commits to next detent even if drag distance is short).
-- Tab bar stays pinned at the bottom of the panel at all detents (like Maps' "Search/Favorites/..." row).
-- Underlying map content should inset its bottom padding to `.minimized` height so map controls/annotations aren't obscured at rest — expose this as a published height value (see §6.3).
+- **Narrow layout** — anchored to the bottom, horizontally centred, inset one edge
+  margin from the container on each side (grown only where the safe area asks for
+  more).
+- **Wide layout** — anchored top-leading, inset one edge margin from the top and
+  leading container edges.
 
-### 4.2 iPadOS / macOS — Floating Corner Panel
+It floats *over* the content. It never resizes or pushes the content; the content
+learns what is covered through §6 and decides for itself.
 
-- Anchored top-left, fixed width (e.g., 320–380pt, configurable), NOT full height by default.
-- Vertically resizable via a drag handle on the **bottom edge** of the panel (cursor becomes resize cursor on macOS via `.onHover` + `NSCursor.resizeUpDown`).
-- Min/max height configurable; default min ≈ tab bar + one row of content, max ≈ window height minus top/bottom margins.
-- Tab bar pinned at the bottom of the panel, consistent with iOS (unlike typical Mac sidebars, this intentionally matches Maps' cross-platform tab placement).
-- Panel floats over the map content; it does not push/resize the map (it's an overlay, not a split view).
+### 3.2 Two slots
 
-### 4.3 Idiom Detection
+The panel has exactly two content slots:
 
-Don't rely purely on horizontal size class — iPad can be "regular" in split view but should still use the corner-panel layout, not the iPhone sheet. Detect explicitly:
+- The **bar slot**, pinned to the panel's bottom edge, sized to its own content.
+- The **main slot**, filling the remaining height above it.
 
-```swift
-enum PanelLayoutMode {
-    case bottomSheet   // iPhone
-    case floatingCorner // iPad, Mac
-}
-```
+A tab view is the expected combination — a row of tabs in the bar, the selected body
+in the main slot — and §9 ships one ready-made. The panel itself models none of it:
+it does not know what either slot contains, and it holds no selection state.
 
-Resolve via `UIDevice.current.userInterfaceIdiom` (iOS/iPadOS) / always `.floatingCorner` on macOS, but allow the consumer to **override** via the config (useful for CarPlay-style edge cases, or if they want iPad to use the phone sheet in compact width).
+### 3.3 Detents
 
----
+The panel resizes vertically between resting heights. The bar slot is visible at
+every one of them.
 
-## 5. Temporary Taskbar
-
-- Same `FloatingChromeStyle` as the panel (material, radius, shadow) — reads as a sibling surface, not a separate UI language.
-- Fixed small height (e.g., 44–56pt), horizontally sized to content or matched to panel width per platform rule below.
-- **iOS:** when taskbar is shown, panel auto-transitions to `.minimized` detent. Taskbar appears directly above the panel, same horizontal width and edge alignment as the panel, small gap (~8pt) between them. Both move together as a coordinated group — treat this as one compound "bottom stack" during layout, not two independently-positioned views.
-- **iPadOS / macOS:** taskbar appears top-centre of the window, independent of the panel (which stays top-left) and of the button stack (top-right). It takes the configured `taskbarWidth`, capped by the free strip between the two, and where centring would put it under either surface it slides clear instead of overlapping. Does not affect panel size/position at all on these platforms.
-- Presentation is driven by the consumer (`isPresented: Bool` binding) — the package does not auto-decide *when* to show it, only *how* and *where*.
-
----
-
-## 6. Public API Contract
-
-Keep the surface small: a handful of config structs + one container view + a couple of environment-style modifiers. Consumer should be able to get a working Maps-like shell in ~20 lines, and override styling/detents without touching internals.
-
-### 6.1 Core API — view modifier, not a container
-
-The package is **content-agnostic**: it doesn't own or wrap your map view. It's a modifier you attach to whatever full-bleed content you already have (map, custom renderer, anything). This keeps adoption to "add one modifier" rather than "restructure your view hierarchy around our container."
+A detent is a fraction of the **available height** — the container less safe areas
+and edge margins — so the set is resolution-independent and the same three values
+mean the same thing on a phone and on a Mac.
 
 ```swift
-public extension View {
-    func floatingPanel<Content: View>(
-        configuration: FloatingPanelConfiguration = .default,
-        tabs: [FloatingPanelTab],
-        selection: Binding<FloatingPanelTab.ID>,
-        isPanelVisible: Binding<Bool> = .constant(true),
-        taskbar: TemporaryTaskbarContent? = nil, // nil = not shown
-        @ViewBuilder content: @escaping (FloatingPanelTab.ID) -> Content
-    ) -> some View
-}
-```
+public struct Detent: Equatable, Hashable, Sendable {
 
-Usage:
+    /// Only the bar slot. The main slot renders no content.
+    public static let minimized = Detent(fraction: 0)
+    /// Half open.
+    public static let half = Detent(fraction: 0.5)
+    /// Everything the safe area and margins allow.
+    public static let full = Detent(fraction: 1)
 
-```swift
-MyMapView()
-    .floatingPanel(tabs: tabs, selection: $selectedTab, content: { id in TabBody(id) })
-```
+    /// The three levels above, the default set.
+    public static let defaultSet: [Detent] = [.minimized, .half, .full]
 
-- Internally implemented as a `ViewModifier` that overlays the panel/tab bar/buttons/taskbar chrome on top of `self` (the map), and injects the environment insets described in §6.6 into `self`'s subtree.
-- The modifier resolves `.bottomSheet` vs `.floatingCorner` internally — no platform-conditional code required from the consumer.
-- Because the map is never re-parented into a package-owned container, the consumer keeps full control over their view hierarchy, state, and any other modifiers they've already applied to it.
-
-### 6.2 Configuration
-
-```swift
-public struct FloatingPanelConfiguration {
-    public var style: FloatingChromeStyle = .default
-    public var layoutModeOverride: PanelLayoutMode? = nil
-    public var detents: [FloatingPanelDetent] = FloatingPanelDetent.defaultSet // iOS only
-    public var cornerPanelWidth: CGFloat = 340        // iPad/Mac
-    public var cornerPanelHeightRange: ClosedRange<CGFloat> = 160...600
-    public var edgeMargin: CGFloat = 16
-    public var showsMapOverlayButtons: Bool = true
-    public var mapOverlayButtons: [MapOverlayButtonKind] = [.userLocation, .mapStyle]
-}
-
-public struct FloatingChromeStyle {
-    public var material: Material
-    public var cornerRadius: CGFloat
-    public var shadowRadius: CGFloat
-    public var shadowOpacity: Double
-    public static let `default`: FloatingChromeStyle
-}
-```
-
-### 6.3 Map overlay buttons
-
-```swift
-public enum MapOverlayButtonKind {
-    case userLocation
-    case mapStyle
-    case custom(id: String, systemImage: String, action: () -> Void)
-}
-```
-
-Ship `.userLocation` and `.mapStyle` as callbacks the consumer supplies (the package shouldn't own CoreLocation or MapKit style state):
-
-```swift
-public struct FloatingPanelActions {
-    public var onUserLocationTapped: () -> Void
-    public var onMapStyleTapped: () -> Void
-}
-```
-
-Passed via an environment-style modifier or as a container init parameter — either is fine, but pick one and be consistent (recommend init parameter for discoverability).
-
-### 6.4 Tabs
-
-```swift
-public struct FloatingPanelTab: Identifiable {
-    public let id: String
-    public let title: String
-    public let systemImage: String
-}
-```
-
-### 6.5 Detents (iOS)
-
-```swift
-public struct FloatingPanelDetent: Equatable {
-    public static let minimized = FloatingPanelDetent(fraction: 0.12)
-    public static let half = FloatingPanelDetent(fraction: 0.5)
-    public static let full = FloatingPanelDetent(fraction: 0.98)
-    public static let defaultSet = [minimized, half, full]
-
-    public let fraction: CGFloat // of screen height
+    /// Clamped to 0...1 on construction.
+    public let fraction: CGFloat
     public init(fraction: CGFloat)
 }
 ```
 
-### 6.6 Content awareness of panel insets
+The set in use is `controller.detents`, defaulting to `.defaultSet`. Consumers may
+supply their own — two detents, or four — and the drag, the snapping, and the wide
+panel's vertical resize all read the same array. Nothing in the layout engine
+assumes three.
 
-Two layers, primary + advanced, so simple consumers get a one-liner and advanced consumers can get exact geometry.
+- **`.minimized` never resolves below the bar slot.** A fraction of 0 floors at the
+  **measured** height of the bar slot plus the panel's own insets — never a constant.
+  Until the first measurement lands the panel lays out from the style's stated
+  placeholder and corrects before anything is on screen (§1.2).
+- **`.full` is all of the available height**, which already excludes safe areas and
+  margins — so it leaves the top inset clear rather than covering the display.
+- The initial detent is simply the value `detent` holds when the controller is
+  created; there is no separate `initialDetent`. A value outside `detents` resolves
+  to the smallest.
 
-**Primary: environment value (recommended default).** The `.floatingPanel(...)` modifier injects the current effective inset into the environment of the content it's attached to (and everything nested inside it — annotation views, custom overlay controls, etc.), the same way SwiftUI publishes safe area information internally.
+An open set rather than a closed enum: the arithmetic is identical either way — a
+fraction of the available height — so the array costs nothing the enum would have
+saved, and it keeps the number of resting heights the consumer's decision (§1.3).
+
+### 3.4 Resizing
+
+- Dragged from the panel's free edge — the top edge on narrow, the bottom edge on
+  wide.
+- The drag follows the finger or pointer continuously, and past the end detents it
+  follows at a reduced rate (the rate is a style value).
+- On release, the panel snaps to the detent nearest the **projected** stopping point,
+  not the release point, so a fast flick commits to the next detent even when the
+  distance was short.
+- Detent arithmetic is pure functions over the available height, kept out of the
+  views and unit-tested. Snapping is the part that decides whether the panel feels
+  right; it is tested rather than eyeballed.
+
+### 3.5 Visibility
+
+`isPanelVisible` on the controller. Toggling it slides the panel off the container
+edge it is anchored to — downwards on narrow, leading on wide — and back. A slide,
+with no fade: the panel is not disappearing, it is leaving.
+
+---
+
+## 4. The Toast
+
+- Anchored **top-centre**, on every layout. It belongs to the container, not to the
+  panel.
+- Shares the panel's chrome exactly: same material, same corner radius, same shadow.
+  It reads as a sibling surface, not a second visual language.
+- Height is whatever its content needs, floored at the style's minimum touch height.
+- **Narrow layout** — the panel's width, so the two surfaces align on both edges.
+- **Wide layout** — the style's preferred toast width, capped by the strip left free
+  between the panel's trailing edge and the button stack's leading edge. Centred on
+  the container, then *slid* clear of either neighbour rather than squeezed. Only a
+  strip narrower than the toast wants costs it width.
+- Presence is the consumer's call (`isToastVisible`); the package decides only how
+  and where. It has no timer and does not auto-dismiss.
+- The toast never moves, resizes, or collapses the panel. The two surfaces are
+  independent on every layout.
+
+---
+
+## 5. The Button Stack
+
+- A vertical column of consumer-supplied views, anchored top-trailing, inset one edge
+  margin.
+- The stack lays out and spaces its children and applies the shared button chrome to
+  its subtree as the default button style — so a plain `Button` gets the circular
+  material treatment for free, and a consumer who wants something else overrides the
+  style. The stack never inspects what it was given.
 
 ```swift
-public struct FloatingPanelInsetsKey: EnvironmentKey {
-    public static let defaultValue: EdgeInsets = EdgeInsets()
-}
+/// The circular material treatment shared by every button in the stack.
+/// Public so a consumer can apply it elsewhere, or opt out inside the stack.
+public struct PanelButtonStyle: ButtonStyle { … }
+```
 
-public extension EnvironmentValues {
-    var floatingPanelInsets: EdgeInsets { get set }
+- Button diameter scales with the user's type size rather than staying pinned to
+  points.
+
+### 5.1 The visibility toggle
+
+The package ships one ready-made control:
+
+```swift
+/// Toggles `isPanelVisible` on the controller in the environment.
+/// Standalone and optional — place it wherever it belongs, typically first
+/// in the button stack.
+public struct PanelVisibilityToggle: View { public init() }
+```
+
+It is a view the consumer places, not behaviour the stack imposes. A consumer who
+wants no toggle simply omits it; one who wants it somewhere else puts it there. Its
+glyph reflects where the panel actually is on the resolved layout.
+
+---
+
+## 6. The Safe Area
+
+With three surfaces floating over the content, the consumer needs to know what
+region is left unobstructed — to centre something in the clear space, to inset
+attribution or controls, to keep a selection visible.
+
+The controller publishes:
+
+```swift
+/// What the chrome covers, per edge. The union of every visible surface.
+public internal(set) var contentInsets: EdgeInsets
+
+/// Each surface's frame in the content's coordinate space, for consumers
+/// bridging into non-SwiftUI inset APIs.
+public internal(set) var panelFrame: CGRect
+public internal(set) var toastFrame: CGRect
+public internal(set) var buttonStackFrame: CGRect
+```
+
+- `contentInsets` accounts for **all three** surfaces, not the panel alone. On narrow
+  that is typically a bottom inset from the panel and a top inset from the toast; on
+  wide, a leading inset from the panel, a trailing inset from the button stack, and a
+  top inset from the toast. Unused edges are zero.
+- Every value updates continuously during an interactive drag or resize, so content
+  tracks the visible edge rather than jumping on release. This is the intended
+  behaviour, not an edge case.
+- A hidden surface contributes nothing.
+
+```swift
+Text("Centred in the clear space")
+    .padding(panel.contentInsets)
+```
+
+The frames are the escape hatch, for feeding a non-SwiftUI inset API that wants a
+rect. Consumers should reach for `contentInsets` first.
+
+---
+
+## 7. `PanelController` — the single source of truth
+
+One observable object owns every piece of state the consumer sets and every piece
+the layout engine reports.
+
+```swift
+@Observable
+public final class PanelController {
+
+    // Consumer-owned state
+    public var isPanelVisible: Bool = true
+    public var isToastVisible: Bool = false
+    /// The panel's resting height. Its value at init is the initial detent.
+    public var detent: Detent = .half
+    /// The resting heights the panel snaps between.
+    public var detents: [Detent] = Detent.defaultSet
+
+    // Consumer-owned configuration
+    public var style: PanelStyle = .default
+    /// Forces a layout; `nil` resolves from the container's width.
+    public var layoutModeOverride: LayoutMode? = nil
+
+    // Published by the layout engine
+    public internal(set) var layoutMode: LayoutMode
+    public internal(set) var contentInsets: EdgeInsets
+    public internal(set) var panelFrame: CGRect
+    public internal(set) var toastFrame: CGRect
+    public internal(set) var buttonStackFrame: CGRect
+
+    public init() {}
 }
 ```
 
-- On iOS, this is a **bottom** inset tracking the sheet's current detent (updates live during drag).
-- On iPadOS/macOS, this is a **leading (left)** inset tracking the corner panel's current width/height footprint.
-- `EdgeInsets` naturally generalizes both cases (unused edges are zero) so consumers don't need platform branches to read it — one property, always correct for the current platform.
-- Updates continuously during interactive drag/resize so map content (attribution, compass, controls) can track smoothly. This is intentional, not a corner case to special-case around.
+**Why this abstraction earns its place (§1.3):** it replaces a binding per surface,
+a configuration struct threaded through the initialiser, and a pair of environment
+and preference keys, with one reference the consumer holds and the engine writes.
+State that must agree — the panel's drawn height and the inset published for it —
+becomes one value written once per layout pass, so the chrome and the content
+underneath cannot disagree. It also gives the consumer a handle to *drive* the
+chrome (open the panel, show the toast) from anywhere in their view tree, which
+bindings scattered across a modifier's parameters do not.
+
+`style` living here is deliberate: global padding, margins, materials, and the
+layout breakpoint are all read from one place a consumer can reach at runtime.
+
+The controller is placed in the content's environment by the modifier, so nested
+views — `PanelVisibilityToggle` included — reach it without being passed it.
+
+---
+
+## 8. Public API
+
+### 8.1 The entry point
+
+The package is a **modifier**, not a container. It attaches to whatever full-bleed
+content already exists; it never re-parents it. Adoption is "add one modifier,"
+not "restructure your hierarchy around ours."
 
 ```swift
-struct MyMapContent: View {
-    @Environment(\.floatingPanelInsets) private var panelInsets
-    var body: some View {
-        MapReader { proxy in
-            Map()
-                .safeAreaPadding(panelInsets) // or feed into a native inset API
-        }
+public extension View {
+    func floatingPanel<Main: View, Bar: View, Toast: View, Buttons: View>(
+        _ controller: PanelController,
+        @ViewBuilder main: @escaping () -> Main,
+        @ViewBuilder bar: @escaping () -> Bar,
+        @ViewBuilder toast: @escaping () -> Toast = { EmptyView() },
+        @ViewBuilder buttons: @escaping () -> Buttons = { EmptyView() }
+    ) -> some View
+}
+```
+
+```swift
+@State private var panel = PanelController()
+@State private var selection = Section.items
+
+MyContent()                       // already ignoring the safe area
+    .floatingPanel(panel) {
+        SectionBody(selection)    // main slot
+    } bar: {
+        SectionPicker($selection) // bar slot — visible at every detent
+    } toast: {
+        EditingControls()
+    } buttons: {
+        PanelVisibilityToggle()
+        Button { locate() } label: { Image(systemName: "location") }
     }
-}
 ```
 
-**Advanced (opt-in): raw frame via PreferenceKey.** For consumers who need an exact `CGRect` — e.g. to feed MapKit's own `layoutMargins`/inset APIs rather than SwiftUI padding — expose the underlying frame as a preference key as well:
+Attach it to the content itself — the view that already ignores the safe area. The
+chrome keeps itself inside the safe area.
+
+### 8.2 Layout mode
 
 ```swift
-public struct FloatingPanelGeometryKey: PreferenceKey {
-    public static var defaultValue: CGRect = .zero
-    public static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
+public enum LayoutMode: Sendable, Hashable {
+    /// Narrow: the panel is a bottom-anchored sheet.
+    case bottomSheet
+    /// Wide: the panel floats top-leading.
+    case floatingCorner
+
+    /// The mode a container of `width` points gets. Public so a consumer can
+    /// make the same call — what to show where — from the same rule.
+    public static func resolve(width: CGFloat, style: PanelStyle) -> LayoutMode
 }
 ```
 
-Read via `.onPreferenceChange(FloatingPanelGeometryKey.self)`. Most consumers should never need this — it exists specifically for bridging into non-SwiftUI inset APIs. Document the environment value as the default path and this as the escape hatch, so the common case stays a one-liner.
+Resolved from the **container's width**, not the device idiom: one view hierarchy
+serves a phone, a narrow iPad split view, and a wide Mac window, and changes only
+its presentation as the window resizes. The threshold is
+`PanelStyle.narrowestFloatingWidth`. `layoutModeOverride` forces a mode.
 
-### 6.7 Temporary taskbar
+The consumer writes no `#if os(...)`. All platform-conditional code lives in the two
+internal panel implementations.
+
+### 8.3 Style tokens
+
+One struct, every number the package uses, all consumer-overridable. This is the
+whole of §1.2's "one file where a number is written down."
 
 ```swift
-public struct TemporaryTaskbarContent {
-    public let id: String
-    public var content: AnyView
-    public init<V: View>(id: String, @ViewBuilder content: () -> V)
+public struct PanelStyle: Sendable {
+
+    // Surfaces
+    public var material: Material              // panel and toast
+    public var buttonMaterial: Material        // lighter; content reads through
+    public var cornerRadius: CGFloat           // continuous
+    public var shadowRadius: CGFloat
+    public var shadowOpacity: Double
+    public var shadowYOffset: CGFloat
+
+    // Spacing
+    public var edgeMarginCompact: CGFloat      // narrow layouts
+    public var edgeMarginRegular: CGFloat      // wide layouts
+    public var surfaceSpacing: CGFloat         // between chrome surfaces
+    public var buttonSpacing: CGFloat          // within the button stack
+
+    // Sizing
+    public var buttonDiameter: CGFloat         // scaled by type size
+    public var minimumTouchHeight: CGFloat     // toast and bar-slot floor
+    public var panelWidth: CGFloat             // wide layouts
+    public var toastWidth: CGFloat             // wide layouts; capped by the free strip
+    public var narrowestFloatingWidth: CGFloat // the layout breakpoint
+
+    // Interaction
+    public var rubberBandFactor: CGFloat       // travel past the end detents
+    public var animation: Animation            // every detent and visibility change
+
+    public static let `default` = PanelStyle()
 }
 ```
 
-Passed into `FloatingPanelContainer(taskbar:)`; presence/absence (nil vs non-nil) drives show/hide, with the container animating the transition and (on iOS) coordinating the panel's forced `.minimized` collapse automatically.
+Corner radii are **concentric with the container** where the platform exposes its
+curvature — inset by a margin, the radius shrinks by that margin — falling back to
+`cornerRadius`. Edge margins grow, never shrink, to clear a safe area that asks for
+more; nothing is device-checked, because the safe area already encodes the hardware.
 
 ---
 
-## 7. Suggested Package Structure
+## 9. The tab layer (optional)
+
+Most consumers will put a row of tabs in the bar slot and the selected body in the
+main slot. The package ships that, so the common case is not homework — but it ships
+it as a **layer above the primitive**, never as a requirement.
+
+Everything here is built out of §8.1 and adds no capability to the layout engine.
+Delete this layer and the panel is unchanged; the engine does not know it exists.
+That is what keeps §1.1 true while still making the ordinary case one call.
+
+### 9.1 The pieces
+
+```swift
+public struct PanelTab<ID: Hashable>: Identifiable {
+    public let id: ID
+    public let title: String
+    public let systemImage: String
+    public init(id: ID, title: String, systemImage: String)
+}
+
+/// Icon-over-label tabs, styled for the panel's bar slot. Usable on its own
+/// in `bar:`, for consumers who want the standard bar but a custom `main:`.
+public struct PanelTabBar<ID: Hashable>: View {
+    public init(_ tabs: [PanelTab<ID>], selection: Binding<ID>)
+}
+```
+
+`PanelTab` is a concrete title-and-symbol model, and that is fine *here* — this layer
+is opinionated by design. A consumer who needs something else writes their own view
+into `bar:` and loses nothing.
+
+### 9.2 The convenience entry point
+
+```swift
+public extension View {
+    func floatingPanel<ID: Hashable, Main: View, Toast: View, Buttons: View>(
+        _ controller: PanelController,
+        tabs: [PanelTab<ID>],
+        selection: Binding<ID>,
+        @ViewBuilder main: @escaping (ID) -> Main,
+        @ViewBuilder toast: @escaping () -> Toast = { EmptyView() },
+        @ViewBuilder buttons: @escaping () -> Buttons = { EmptyView() }
+    ) -> some View
+}
+```
+
+Its whole implementation is the primitive with the bar slot filled in:
+
+```swift
+floatingPanel(controller) { main(selection.wrappedValue) }
+    bar: { PanelTabBar(tabs, selection: selection) }
+    toast: toast
+    buttons: buttons
+```
+
+```swift
+MyContent()
+    .floatingPanel(panel, tabs: tabs, selection: $section) { section in
+        SectionBody(section)
+    } buttons: {
+        PanelVisibilityToggle()
+    }
+```
+
+### 9.3 One behaviour it adds
+
+`PanelTabBar` reads the controller from the environment, so a tap on any tab — the
+already-selected one included — opens a minimized panel to the next detent up. A
+bare tab bar switching invisible content helps no one.
+
+This nicety lives here rather than in the engine on purpose: the primitive stays
+ignorant of what its bar contains, and the layer that *does* know adds the
+behaviour. A consumer building their own bar can do the same by writing to
+`controller.detent`.
+
+---
+
+## 10. Package structure
 
 ```
-FloatingPanelKit/
-  Sources/FloatingPanelKit/
-    Core/
-      FloatingPanelConfiguration.swift
-      FloatingChromeStyle.swift
-      FloatingPanelDetent.swift
-      PanelLayoutMode.swift
-    Views/
-      FloatingPanelModifier.swift         // public entry point (`.floatingPanel(...)`)
-      FloatingPanel.swift                 // bottom sheet / corner panel switcher
-      BottomSheetPanel.swift              // iOS-specific layout + drag logic
-      FloatingCornerPanel.swift           // iPad/Mac-specific layout + resize logic
-      FloatingPanelTabBar.swift
-      MapOverlayButtonStack.swift
-      PanelVisibilityToggle.swift
-      TemporaryTaskbar.swift
-    Modifiers/
-      FloatingPanelGeometryReader.swift
-    Support/
-      PlatformIdiom.swift                 // resolves PanelLayoutMode
-  Tests/FloatingPanelKitTests/
-  Package.swift
+Sources/SwiftUIPanel/
+  PanelController.swift        // the shared source of truth
+  PanelStyle.swift             // every number, named
+  Detent.swift
+  LayoutMode.swift
+
+  FloatingPanelModifier.swift  // public entry point; one GeometryReader, one pass
+  BottomSheetPanel.swift       // narrow layout + drag
+  FloatingCornerPanel.swift    // wide layout + resize
+  Toast.swift
+  ButtonStack.swift            // + PanelButtonStyle, PanelVisibilityToggle
+  PanelSurface.swift           // shared material/radius/shadow treatment
+
+  PanelLayoutMath.swift        // detent + inset arithmetic, pure and unit-tested
+  ContainerCornerRadius.swift
+  ResizeCursor.swift
+
+  Tabs/                        // §9 — optional layer, built on the public API
+    PanelTab.swift
+    PanelTabBar.swift
+    FloatingPanelModifier+Tabs.swift
+
+Tests/SwiftUIPanelTests/
 ```
 
-- `BottomSheetPanel` and `FloatingCornerPanel` are internal — `FloatingPanel` picks between them based on resolved `PanelLayoutMode` and presents a single API outward.
-- Keep MapKit/CoreLocation entirely out of the package; it only renders chrome and reports intents (button taps) via closures. This makes it reusable for non-MapKit map SDKs too.
+`BottomSheetPanel` and `FloatingCornerPanel` are internal; the modifier picks between
+them and presents one API outward.
+
+`Tabs/` is a separate directory to keep the boundary honest: nothing outside it may
+be imported by the engine, and nothing inside it may reach past the public API. If a
+file in `Tabs/` ever needs internal access, the layering has been broken.
 
 ---
 
-## 8. Implementation Notes for the Coding Model
+## 11. Implementation notes
 
-- Use `GeometryReader` at the `FloatingPanelContainer` level once, pass resolved size down — avoid nested `GeometryReader`s causing layout thrash.
-- Bottom sheet drag: track a `@GestureState` offset, compute nearest detent by both **position** and **projected velocity** (`predictedEndLocation`), not just release position — this is what makes Apple's sheets feel right.
-- Corner panel resize on macOS: back the drag handle with `.onHover { NSCursor.resizeUpDown.set() }` guarded by `#if os(macOS)`; on iPadOS use a plain drag gesture (no cursor).
-- All platform-conditional code should live in the two internal panel implementations (`BottomSheetPanel` / `FloatingCornerPanel`), never leak into consumer-facing API — the whole point of the package is the consumer writes zero `#if os()` in their app.
-- Respect safe areas explicitly (`.ignoresSafeArea()` on the map layer only; panel/buttons should stay within safe area insets).
-- Taskbar/panel coordination on iOS (forcing `.minimized` when taskbar appears) should be a single derived state, not two independent animations racing each other — compute target frames for both surfaces in one pass per state change.
-- Make `FloatingPanelTab.id` generic-friendly later if needed (currently `String`) but ship with `String` for simplicity/coding-model-friendliness.
-- `floatingPanelInsets` should be driven by the same `@GestureState`/animation values used to lay out the panel itself — compute inset once per state change and inject via `.environment(\.floatingPanelInsets, value)` on the wrapped content, rather than recomputing independently. This keeps map content perfectly in sync with the visible panel edge, including mid-drag.
-- Since the modifier no longer owns the map's parent view, it needs its own `GeometryReader` sized to `self` (the content it's attached to) to compute absolute detent heights / corner panel bounds — apply this inside the modifier's `body(content:)`, not in the public-facing API surface.
+- **One `GeometryReader`**, at the modifier level. Resolve the container size once
+  and pass it down; nested readers thrash.
+- **One pass per state change** yields the panel height, every surface frame, and the
+  insets together. The chrome and the content's insets are computed from the same
+  values, never independently.
+- **Publish to the controller outside the layout pass** — from `onGeometryChange` or
+  an equivalent, never inline in `body`. Writing observable state during view update
+  is a runtime warning and a source of layout loops.
+- **Place surfaces explicitly.** One full-container stack that ignores the safe area
+  exactly once, with every surface positioned by alignment plus explicit safe-area
+  padding — so placement never depends on how SwiftUI resolves safe areas for
+  overlays, which is how a sheet ends up under the Dynamic Island.
+- **Measure the bar slot** to resolve the floor under `.minimized`. Do not estimate it.
+- **Snap by projected velocity**, from the drag's predicted end translation.
+- **macOS pointer cues** on the resize edge, guarded and confined to the wide panel
+  implementation.
+- Every drag and visibility change animates with `style.animation`, and nothing else.
 
 ---
 
-## 9. Open Decisions to Confirm Before Implementation
+## 12. Resolved questions
 
-- Should `PanelVisibilityToggle` live inside `MapOverlayButtonStack` (as the top button) or be visually separate? Maps keeps it separate-ish but adjacent — recommend same stack, top position, for the coding model to have one clear container.
-- Exact default detent fractions (0.12 / 0.5 / 0.98 above are placeholders — validate against target device sizes).
-- Whether macOS window is resizable enough that `cornerPanelHeightRange` needs to react to window resize (likely yes — recompute max on window size change).
+The three questions §13 used to leave open, and the answers now in the code.
+
+### 12.1 The wide panel resizes freely by width
+
+Kept. The trailing and corner grips stay, and `PanelStyle.panelWidthRange` bounds
+them; the upper bound is capped again by the room left beside the button stack.
+
+Height went the other way: it is a **detent on both layouts**, so `controller.detent`
+is *the* panel's resting height whatever the layout, `.minimized` floors at the
+measured bar slot on wide exactly as it does on narrow, and the bottom grip snaps by
+projected velocity like the sheet's drag. That removed a second height model —
+`initialCornerPanelHeight`, `cornerPanelHeightRange`, and `cornerPanelSnapsVertically`
+are all gone — and it is why §8.3's token list carries `panelWidthRange` but no
+height equivalent.
+
+### 12.2 The full-screen margin dissolve stays
+
+Kept, with `PanelStyle.marginDissolveDistance` as its one token. Over the last stretch
+to `.full` the sheet's side and bottom margins collapse and it goes edge-to-edge, its
+corners turning concentric with the display's own curvature as they do.
+
+### 12.3 The toast keeps its margins at `.full`
+
+The toast is an inset card at the top whatever the panel is doing. §4's last line —
+the two surfaces are independent on every layout — settles it: the toast is nowhere
+near the panel's edge, and coupling its width to the panel's drag would be the one
+piece of coordination this revision set out to remove.
+
+---
+
+## 13. Notes on the implementation
+
+- **The button stack steps below the toast where the two would collide.** §4 puts the
+  toast top-centre at the panel's width on narrow; §5 puts the stack top-trailing on
+  every layout. On a narrow container those are the same points. The stack therefore
+  takes `toastFrame.maxY + surfaceSpacing` as its top whenever the toast reaches its
+  column — always on narrow, never on wide, where the toast's strip already keeps
+  clear of it. One rule, no layout branch.
+- **`PanelButtonStyle(prominent:)`.** §5 shows the style with its members elided. It
+  takes one: `prominent` fills the circle with the accent colour, for the single
+  primary action of a screen. Without it a consumer wanting an accented button has to
+  re-implement the whole circular treatment to change its fill.
+- **`ContainerCornerRadius` holds the only literals outside `PanelStyle`**: the
+  macOS window radius per major release, since AppKit exposes no API for it. They are
+  measurements of the system's own window shape rather than design values — the
+  reason §1.2's "everything else is measured or derived" does not reach them — and
+  the UIKit side reads the display's radius rather than hardcoding it.

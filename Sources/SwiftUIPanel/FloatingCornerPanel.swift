@@ -1,33 +1,33 @@
 import SwiftUI
 
-/// iPad and Mac: an inspector anchored top-left, resized from its trailing
-/// edge, its bottom edge, or the corner between them. It floats over the
-/// content; it never pushes it.
+/// The wide layout: a panel anchored top-leading, resized from its trailing
+/// edge, its bottom edge, or the corner between them.
 ///
 /// The grips draw nothing — the pointer changing is the affordance — and are
 /// only as thick as a comfortable target.
-struct FloatingCornerPanel<Content: View>: View {
+struct FloatingCornerPanel<Main: View, Bar: View>: View {
 
   let style: PanelStyle
   let size: CGSize
   let cornerRadius: CGFloat
-  let tabs: [FloatingPanelTab]
-  @Binding var selection: FloatingPanelTab.ID
-  let content: (FloatingPanelTab.ID) -> Content
-  /// `predictedTranslation` is non-nil only when the drag ends.
-  let onResize: (_ edge: ResizeEdge, _ translation: CGSize, _ predictedTranslation: CGSize?) -> Void
-
-  static var gripThickness: CGFloat { 10 }
+  @ViewBuilder let main: Main
+  @ViewBuilder let bar: Bar
+  /// `projectedTranslation` is non-nil only on the drag that ends the resize.
+  let onResize: (ResizeEdge, _ translation: CGSize, _ projectedTranslation: CGSize?) -> Void
 
   var body: some View {
-    PanelTabs(tabs: tabs, selection: $selection, content: content)
-      .padding(.bottom, 4)
-      .frame(width: size.width, height: size.height)
-      .floatingChrome(style, radii: .all(cornerRadius))
-      .overlay(alignment: .trailing) { grip(.trailing) }
-      .overlay(alignment: .bottom) { grip(.bottom) }
-      .overlay(alignment: .bottomTrailing) { grip(.bottomTrailing) }
-      .keyboardFocusSection()
+    VStack(spacing: 0) {
+      main
+        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+        .clipped()
+      bar
+    }
+    .frame(width: size.width, height: size.height)
+    .panelSurface(style, cornerRadius: cornerRadius)
+    .overlay(alignment: .trailing) { grip(.trailing) }
+    .overlay(alignment: .bottom) { grip(.bottom) }
+    .overlay(alignment: .bottomTrailing) { grip(.bottomTrailing) }
+    .keyboardFocusSection()
   }
 
   private func grip(_ edge: ResizeEdge) -> some View {
@@ -36,19 +36,21 @@ struct FloatingCornerPanel<Content: View>: View {
       .contentShape(Rectangle())
       .resizeCursor(edge)
       .gesture(
-        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+        DragGesture(minimumDistance: style.dragMinimumDistance, coordinateSpace: .global)
           .onChanged { onResize(edge, $0.translation, nil) }
           .onEnded { onResize(edge, $0.translation, $0.predictedEndTranslation) }
       )
       .accessibilityLabel("Resize panel")
   }
 
+  /// Each grip spans its own edge, stopping short of the corner so the three
+  /// targets never overlap.
   private func gripSize(_ edge: ResizeEdge) -> CGSize {
-    let t = Self.gripThickness
+    let thickness = style.gripThickness
     switch edge {
-    case .trailing: return CGSize(width: t, height: max(size.height - t * 2, 0))
-    case .bottom: return CGSize(width: max(size.width - t * 2, 0), height: t)
-    case .bottomTrailing: return CGSize(width: t * 2, height: t * 2)
+    case .trailing: return CGSize(width: thickness, height: max(size.height - thickness * 2, 0))
+    case .bottom: return CGSize(width: max(size.width - thickness * 2, 0), height: thickness)
+    case .bottomTrailing: return CGSize(width: thickness * 2, height: thickness * 2)
     }
   }
 }

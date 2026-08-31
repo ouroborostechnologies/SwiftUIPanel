@@ -2,279 +2,358 @@ import SwiftUI
 
 public extension View {
 
-  /// Overlays a floating panel, tab bar, overlay buttons, and optional
-  /// taskbar on this full-bleed content, and publishes what they cover via
-  /// `\.floatingPanelInsets` (and `FloatingPanelGeometryKey` for raw frames).
+  /// Floats a panel, a toast, and a column of buttons over this content, and
+  /// reports what they cover through `controller`.
   ///
-  /// Attach it to the content itself — the view that already ignores the
-  /// safe area. The chrome stays inside the safe area on its own.
+  /// Attach it to the full-bleed view that already ignores the safe area; the
+  /// chrome keeps itself inside the safe area, and never resizes or pushes the
+  /// content it floats over.
+  ///
+  /// ```swift
+  /// MyContent()
+  ///     .floatingPanel(panel) {
+  ///         SectionBody(section)        // main
+  ///     } bar: {
+  ///         SectionPicker($section)     // bar
+  ///     } buttons: {
+  ///         PanelVisibilityToggle()
+  ///     }
+  /// ```
   ///
   /// - Parameters:
-  ///   - taskbar: `nil` hides the taskbar. On iPhone its presence forces the
-  ///     sheet to its smallest detent.
-  func floatingPanel<Content: View>(
-    configuration: Configuration = .default,
-    tabs: [FloatingPanelTab],
-    selection: Binding<FloatingPanelTab.ID>,
-    isPanelVisible: Binding<Bool> = .constant(true),
-    taskbar: TemporaryTaskbarContent? = nil,
-    @ViewBuilder content: @escaping (FloatingPanelTab.ID) -> Content
+  ///   - controller: the panel's state, and where its geometry is reported.
+  ///   - main: the panel's upper slot. Collapses to nothing at `.minimized`.
+  ///   - bar: the panel's bottom slot, visible at every detent.
+  ///   - toast: a transient surface, top-centre, shown while
+  ///     `controller.isToastVisible`.
+  ///   - buttons: a column of controls, top-trailing, dressed by
+  ///     `PanelButtonStyle` unless they say otherwise.
+  func floatingPanel<Main: View, Bar: View, ToastContent: View, Buttons: View>(
+    _ controller: PanelController,
+    @ViewBuilder main: @escaping () -> Main,
+    @ViewBuilder bar: @escaping () -> Bar,
+    @ViewBuilder toast: @escaping () -> ToastContent = { EmptyView() },
+    @ViewBuilder buttons: @escaping () -> Buttons = { EmptyView() }
   ) -> some View {
-    modifier(FloatingPanelModifier(configuration: configuration,
-                                   tabs: tabs,
-                                   selection: selection,
-                                   isPanelVisible: isPanelVisible,
-                                   taskbar: taskbar,
-                                   panelContent: content))
+    modifier(FloatingPanelModifier(controller: controller,
+                                   main: main, bar: bar, toast: toast, buttons: buttons))
   }
 }
 
-/// The whole shell. One `GeometryReader`, one pass per state change that
-/// yields the sheet height, the corner height, the insets, and the frames —
-/// so the content underneath and the chrome on top can never disagree.
-struct FloatingPanelModifier<PanelContent: View>: ViewModifier {
+/// The shell. One `GeometryReader`, and one pass per state change that decides
+/// the panel's height, every surface's frame, and the insets together — so the
+/// chrome and the content underneath cannot disagree.
+struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View, Buttons: View>: ViewModifier {
 
-  let configuration: Configuration
-  let tabs: [FloatingPanelTab]
-  @Binding var selection: FloatingPanelTab.ID
-  @Binding var isPanelVisible: Bool
-  let taskbar: TemporaryTaskbarContent?
-  let panelContent: (FloatingPanelTab.ID) -> PanelContent
+  let controller: PanelController
+  let main: () -> Main
+  let bar: () -> Bar
+  let toast: () -> ToastContent
+  let buttons: () -> Buttons
 
-  /// The sheet's detent between drags.
-  @State private var restingDetent: Detent?
-  /// The live drag, positive downwards. Reset by SwiftUI when the gesture ends.
-  @State private var sheetDrag: CGFloat = 0
-  @State private var cornerSize: CGSize?
-  @State private var cornerResizeStart: CGSize?
-  @State private var taskbarHeight: CGFloat = 0
-  /// The sheet's measured handle + tab bar + bottom inset — the height of
-  /// `.minimized`, where only the tab bar shows. The estimate holds for the
-  /// first frame; the measurement replaces it before anything is visible.
-  @State private var sheetChromeHeight: CGFloat = 76
+  /// The live drag of the panel's free edge, positive downwards. SwiftUI
+  /// resets it when the gesture ends.
+  @State private var heightDrag: CGFloat = 0
+  /// The wide panel's width between resizes, and the size the current resize
+  /// started from.
+  @State private var panelWidth: CGFloat?
+  @State private var resizeStart: CGSize?
+  /// Measured rather than estimated, once the panel has laid out once.
+  @State private var barHeight: CGFloat?
+  @State private var toastHeight: CGFloat = 0
+  @State private var buttonStackSize: CGSize = .zero
 
-  static var taskbarGap: CGFloat { 8 }
-
-  private var style: PanelStyle { configuration.style }
+  private var style: PanelStyle { controller.style }
 
   func body(content: Content) -> some View {
-    GeometryReader { geometry in
-      let safe = geometry.safeAreaInsets
-      let full = CGSize(width: geometry.size.width + safe.leading + safe.trailing,
-                        height: geometry.size.height + safe.top + safe.bottom)
-      let mode = PlatformIdiom.resolve(override: configuration.layoutModeOverride, width: full.width,
-                                       breakpoints: configuration.layoutBreakpoints)
-      let margin = style.edgeMargin(for: mode)
+    GeometryReader { proxy in
+      let layout = resolveLayout(in: proxy)
 
-      // One full-window stack that ignores the safe area exactly once. Every
-      // surface is then placed by alignment plus *explicit* safe-area padding,
-      // so where the chrome lands never depends on how SwiftUI resolves safe
-      // areas for overlays — which is how a sheet ends up under the Dynamic
-      // Island.
+      // One full-container stack that ignores the safe area exactly once. Each
+      // surface is then placed by alignment plus explicit safe-area padding, so
+      // where it lands never depends on how SwiftUI resolves safe areas for
+      // overlays — which is how a sheet ends up under the Dynamic Island.
       ZStack(alignment: .topLeading) {
-        switch mode {
-        case .bottomSheet:
-          bottomSheetLayout(content: content, full: full, safe: safe, margin: margin)
-        case .floatingCorner:
-          floatingCornerLayout(content: content, full: full, safe: safe, margin: margin)
-        }
+        content
+        placeButtons(layout)
+        placeToast(layout)
+        placePanel(layout)
       }
-      .frame(width: full.width, height: full.height)
+      .frame(width: layout.container.width, height: layout.container.height)
       .ignoresSafeArea()
-      .environment(\.floatingPanelLayoutMode, mode)
+      .environment(\.panelController, controller)
+      // Reported from outside the view update: writing observable state during
+      // `body` is a runtime warning and a source of layout loops.
+      .onChange(of: layout.geometry, initial: true) { _, geometry in
+        controller.report(geometry)
+      }
     }
   }
 
-  // MARK: - iPhone
+  // MARK: - One pass
 
-  @ViewBuilder
-  private func bottomSheetLayout(content: Content, full: CGSize, safe: EdgeInsets, margin: CGFloat) -> some View {
-    // The sheet floats one margin from the display's edges — the bottom gap
-    // is measured from the display, not the safe area, so it reads the same
-    // as the sides; the sheet's *content* keeps clear of the home indicator
-    // instead. The sides use the chrome insets: the margin, unless the safe area
-    // (Dynamic Island in landscape) asks for more. Over its final approach to
-    // `.full` the side and bottom margins dissolve and it goes edge-to-edge;
-    // only the top clearance stays, so a sliver of content remains visible
-    // and the handle stays reachable.
-    let edge = EdgeInsets(chromeSafe: safe, margin: margin)
-    let bottomClearance = margin
-    let layout = SheetLayout(availableHeight: full.height - edge.top - bottomClearance,
-                             detents: configuration.detents,
-                             chromeHeight: sheetChromeHeight)
-    let resting = restingDetent ?? (layout.contains(configuration.initialDetent) ? configuration.initialDetent : layout.smallest)
-    // One derived state: a taskbar forces the smallest detent and suspends
-    // dragging, so the two surfaces never animate against each other.
-    let effective = taskbar == nil ? resting : layout.smallest
-    let sheetHeight = isPanelVisible ? layout.displayedHeight(resting: effective, dragTranslation: taskbar == nil ? sheetDrag : 0) : 0
-    let progress = layout.fullScreenProgress(displayedHeight: sheetHeight)
-    let leadingInset = edge.leading * (1 - progress)
-    let trailingInset = edge.trailing * (1 - progress)
-    let bottomInset = bottomClearance * (1 - progress)
-    // As the bottom margin collapses the sheet grows to fill the freed space,
-    // so its top edge stays where the detent math put it.
-    let displayedHeight = sheetHeight + bottomClearance * progress
-    // Concentric with the display: inset by the margin, the radius shrinks by
+  private func resolveLayout(in proxy: GeometryProxy) -> ResolvedLayout {
+    let safeArea = proxy.safeAreaInsets
+    let container = CGSize(width: proxy.size.width + safeArea.leading + safeArea.trailing,
+                           height: proxy.size.height + safeArea.top + safeArea.bottom)
+    let mode = controller.layoutModeOverride ?? LayoutMode.resolve(width: container.width, style: style)
+    let margin = style.edgeMargin(for: mode)
+    let edge = EdgeInsets(margin: margin, clearing: safeArea)
+
+    // A sheet floats one margin above the container's bottom edge rather than
+    // above the safe area, so its bottom gap reads the same as its sides; its
+    // *content* clears the home indicator instead.
+    let sheetBottomClearance = margin
+    let bottomInset = mode == .bottomSheet ? sheetBottomClearance : edge.bottom
+
+    var layout = ResolvedLayout(
+      mode: mode,
+      container: container,
+      safeArea: safeArea,
+      margin: margin,
+      edge: edge,
+      heights: PanelHeights(availableHeight: container.height - edge.top - bottomInset,
+                            detents: controller.detents,
+                            barHeight: barHeight ?? style.barHeightEstimate,
+                            style: style),
+      widths: PanelWidths(configuredRange: style.panelWidthRange,
+                          available: container.width - edge.leading - edge.trailing - buttonStackAllowance(margin)))
+
+    switch mode {
+    case .bottomSheet: resolveSheet(&layout)
+    case .floatingCorner: resolveCornerPanel(&layout)
+    }
+    resolveToast(&layout)
+    resolveButtonStack(&layout)
+
+    layout.contentInsets = ChromeInsets.covering(panel: layout.panelFrame,
+                                                 toast: layout.toastFrame,
+                                                 buttonStack: layout.buttonStackFrame,
+                                                 in: container, mode: mode)
+    return layout
+  }
+
+  /// The column the button stack claims, once it has measured itself.
+  private func buttonStackAllowance(_ margin: CGFloat) -> CGFloat {
+    buttonStackSize.width > 0 ? buttonStackSize.width + margin : 0
+  }
+
+  /// Over its final approach to `.full` the sheet's side and bottom margins
+  /// dissolve and it goes edge-to-edge; only the top clearance stays, so a
+  /// sliver of content and the handle remain reachable.
+  private func resolveSheet(_ layout: inout ResolvedLayout) {
+    let bottomClearance = layout.margin
+    let resting = layout.heights.resolved(controller.detent)
+    let height = layout.heights.height(from: resting, draggedBy: heightDrag)
+    let dissolve = layout.heights.dissolveProgress(atHeight: height)
+
+    layout.sheetLeadingInset = layout.edge.leading * (1 - dissolve)
+    layout.sheetTrailingInset = layout.edge.trailing * (1 - dissolve)
+    layout.sheetBottomInset = bottomClearance * (1 - dissolve)
+    // The sheet grows into the space the dissolving bottom margin frees, so its
+    // top edge stays where the detent put it.
+    layout.panelHeight = height + bottomClearance * dissolve
+    layout.barBottomInset = max(layout.safeArea.bottom - layout.sheetBottomInset, 0)
+    // Concentric with the container: inset by the margin the radius shrinks by
     // the margin, and edge-to-edge it matches the screen's own curvature.
-    let cornerRadius = ContainerCornerRadius.concentric(inset: min(leadingInset, trailingInset), fallback: style.cornerRadius)
-    let insets = PanelInsets.bottomSheet(sheetHeight: sheetHeight,
-                                         taskbarHeight: taskbar == nil ? nil : taskbarHeight,
-                                         gap: Self.taskbarGap,
-                                         bottomClearance: bottomClearance)
-    let sheetFrame = CGRect(x: leadingInset,
-                            y: full.height - bottomClearance - sheetHeight,
-                            width: full.width - leadingInset - trailingInset,
-                            height: displayedHeight)
+    layout.panelCornerRadius = ContainerCornerRadius.concentric(
+      inset: min(layout.sheetLeadingInset, layout.sheetTrailingInset), fallback: style.cornerRadius)
 
-    content
-      .environment(\.floatingPanelInsets, insets)
-      .preference(key: FloatingPanelGeometryKey.self, value: isPanelVisible ? sheetFrame : .zero)
-
-    if configuration.showsOverlayButtons {
-      buttonStack
-        .padding(.top, edge.top)
-        .padding(.trailing, edge.trailing)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-    }
-
-    VStack(spacing: Self.taskbarGap) {
-      if let taskbar {
-        TemporaryTaskbar(style: style, taskbar: taskbar)
-          .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { taskbarHeight = $0 }
-          .padding(.leading, edge.leading)
-          .padding(.trailing, edge.trailing)
-          .transition(.move(edge: .bottom).combined(with: .opacity))
-      }
-      if isPanelVisible {
-        BottomSheetPanel(style: style,
-                         tabs: tabs,
-                         selection: $selection,
-                         displayedHeight: displayedHeight,
-                         cornerRadius: cornerRadius,
-                         bottomSafeInset: max(safe.bottom - bottomInset, 0),
-                         isDraggable: taskbar == nil,
-                         content: panelContent,
-                         onChromeHeightChange: { sheetChromeHeight = $0 },
-                         onTabTapped: {
-                           // Fully closed, a tab press opens the sheet — a
-                           // bare tab bar switching invisible content helps
-                           // no one. A taskbar keeps it closed, though; it
-                           // owns the room.
-                           guard taskbar == nil, resting == layout.smallest else { return }
-                           withAnimation(style.animation) { restingDetent = layout.openedFromCollapsed }
-                         },
-                         onDragChanged: { sheetDrag = $0 },
-                         onDragEnded: { predicted in
-                           let next = layout.snappedDetent(resting: resting, predictedTranslation: predicted)
-                           withAnimation(style.animation) {
-                             restingDetent = next
-                             sheetDrag = 0
-                           }
-                         })
-          .padding(.leading, leadingInset)
-          .padding(.trailing, trailingInset)
-          .transition(.move(edge: .bottom))
-      }
-    }
-    // A lone taskbar has no content inset of its own, so it stays above the
-    // home indicator; the sheet handles the safe area internally.
-    .padding(.bottom, isPanelVisible ? bottomInset : edge.bottom)
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-    .animation(style.animation, value: taskbar?.id)
-    .animation(style.animation, value: isPanelVisible)
+    guard controller.isPanelVisible else { return }
+    layout.panelFrame = CGRect(x: layout.sheetLeadingInset,
+                               y: layout.container.height - bottomClearance - height,
+                               width: layout.container.width - layout.sheetLeadingInset - layout.sheetTrailingInset,
+                               height: layout.panelHeight)
   }
 
-  // MARK: - iPad and Mac
+  private func resolveCornerPanel(_ layout: inout ResolvedLayout) {
+    let resting = layout.heights.resolved(controller.detent)
+    // Dragging the bottom edge down grows the panel, where dragging a sheet
+    // down shrinks it.
+    layout.panelHeight = layout.heights.height(from: resting, draggedBy: -heightDrag)
+    layout.panelCornerRadius = ContainerCornerRadius.concentric(inset: layout.margin,
+                                                                fallback: style.cornerRadius)
+
+    guard controller.isPanelVisible else { return }
+    layout.panelFrame = CGRect(x: layout.edge.leading, y: layout.edge.top,
+                               width: layout.widths.clamped(panelWidth ?? style.panelWidth),
+                               height: layout.panelHeight)
+  }
+
+  /// The toast belongs to the container on both layouts: the panel's width on
+  /// narrow, so the two align on either edge; its own width on wide, capped by
+  /// the strip left free between the panel and the button stack. It keeps its
+  /// margins through a sheet's dissolve — the two surfaces are independent.
+  private func resolveToast(_ layout: inout ResolvedLayout) {
+    guard controller.isToastVisible else { return }
+    let container = layout.container
+    let edge = layout.edge
+    let margin = layout.margin
+    let originX: CGFloat
+    let width: CGFloat
+
+    switch layout.mode {
+    case .bottomSheet:
+      originX = edge.leading
+      width = max(container.width - edge.leading - edge.trailing, 0)
+    case .floatingCorner:
+      let span = ToastSpan(containerWidth: container.width,
+                           stripLeading: layout.panelFrame.isEmpty ? edge.leading : layout.panelFrame.maxX + margin,
+                           stripTrailing: container.width - edge.trailing - buttonStackAllowance(margin),
+                           preferredWidth: style.toastWidth)
+      originX = span.originX
+      width = span.width
+    }
+    layout.toastFrame = CGRect(x: originX, y: edge.top, width: width, height: toastHeight)
+  }
+
+  /// Top-trailing, and below the toast wherever the toast reaches its column —
+  /// always on a narrow layout, never on a wide one, where the toast's strip
+  /// already keeps clear of it.
+  private func resolveButtonStack(_ layout: inout ResolvedLayout) {
+    guard buttonStackSize.width > 0 else {
+      layout.buttonStackTop = layout.edge.top
+      return
+    }
+    let originX = layout.container.width - layout.edge.trailing - buttonStackSize.width
+    let clearsToast = layout.toastFrame.isEmpty || layout.toastFrame.maxX <= originX
+    layout.buttonStackTop = clearsToast ? layout.edge.top : layout.toastFrame.maxY + style.surfaceSpacing
+    layout.buttonStackFrame = CGRect(origin: CGPoint(x: originX, y: layout.buttonStackTop),
+                                     size: buttonStackSize)
+  }
+
+  // MARK: - Placing what the pass decided
 
   @ViewBuilder
-  private func floatingCornerLayout(content: Content, full: CGSize, safe: EdgeInsets, margin: CGFloat) -> some View {
-    // One margin from each display edge, grown only where the safe area asks
-    // for more. Never taller than the window, never wide enough to reach the
-    // button stack.
-    let edge = EdgeInsets(chromeSafe: safe, margin: margin)
-    let stackAllowance = configuration.showsOverlayButtons ? style.buttonDiameter + margin : 0
-    let layout = CornerLayout(configuredHeightRange: configuration.cornerPanelHeightRange,
-                              configuredWidthRange: configuration.cornerPanelWidthRange,
-                              availableHeight: full.height - edge.top - edge.bottom,
-                              availableWidth: full.width - edge.leading - edge.trailing - stackAllowance)
-    let size = layout.clamped(cornerSize ?? CGSize(width: configuration.cornerPanelWidth,
-                                                   height: configuration.initialCornerPanelHeight))
-    // Concentric with the container — the display's corners on iPad, the
-    // window's on the Mac — where its curvature allows, else the style's own.
-    let cornerRadius = ContainerCornerRadius.concentric(inset: margin, fallback: style.cornerRadius)
-    let insets = isPanelVisible
-      ? PanelInsets.floatingCorner(leadingInset: edge.leading, width: size.width)
-      : EdgeInsets()
-    let panelFrame = CGRect(x: edge.leading, y: edge.top, width: size.width, height: size.height)
+  private func placePanel(_ layout: ResolvedLayout) -> some View {
+    if controller.isPanelVisible {
+      switch layout.mode {
+      case .bottomSheet:
+        BottomSheetPanel(style: style,
+                         height: layout.panelHeight,
+                         cornerRadius: layout.panelCornerRadius,
+                         barBottomInset: layout.barBottomInset,
+                         main: { main() },
+                         bar: { bar() },
+                         onBarHeightChange: { barHeight = $0 },
+                         onDragChanged: { heightDrag = $0 },
+                         onDragEnded: { settleHeight(layout, projecting: $0) })
+          .padding(.leading, layout.sheetLeadingInset)
+          .padding(.trailing, layout.sheetTrailingInset)
+          .padding(.bottom, layout.sheetBottomInset)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+          .transition(.move(edge: .bottom))
+          .animation(style.animation, value: controller.isPanelVisible)
 
-    content
-      .environment(\.floatingPanelInsets, insets)
-      .preference(key: FloatingPanelGeometryKey.self, value: isPanelVisible ? panelFrame : .zero)
-
-    if configuration.showsOverlayButtons {
-      buttonStack
-        .padding(.top, edge.top)
-        .padding(.trailing, edge.trailing)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+      case .floatingCorner:
+        FloatingCornerPanel(style: style,
+                            size: CGSize(width: layout.panelFrame.width, height: layout.panelHeight),
+                            cornerRadius: layout.panelCornerRadius,
+                            main: { main() },
+                            bar: { bar() },
+                            onResize: { edge, translation, projected in
+                              resize(layout, edge: edge, translation: translation, projecting: projected)
+                            })
+          .padding(.top, layout.edge.top)
+          .padding(.leading, layout.edge.leading)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+          // A slide with no fade: the panel is not disappearing, it is leaving.
+          .transition(.move(edge: .leading))
+          .animation(style.animation, value: controller.isPanelVisible)
+      }
     }
+  }
 
-    // The taskbar reads as the window's, not the panel's: top centre, sized
-    // from the configuration and capped by the strip left free between the
-    // panel's trailing edge and the button stack. Both gaps are one margin,
-    // so even a taskbar wide enough to fill the strip keeps its distance.
-    let span = TaskbarSpan(containerWidth: full.width,
-                           leading: isPanelVisible ? edge.leading + size.width + margin : edge.leading,
-                           trailing: full.width - edge.trailing - stackAllowance,
-                           preferredWidth: configuration.taskbarWidth)
-
+  private func placeToast(_ layout: ResolvedLayout) -> some View {
+    // The container stays put so the toast's arrival and departure animate.
     ZStack(alignment: .topLeading) {
-      if let taskbar {
-        TemporaryTaskbar(style: style, taskbar: taskbar)
-          .frame(width: span.width)
-          .padding(.leading, span.originX)
+      if controller.isToastVisible {
+        Toast(style: style) { toast() }
+          .frame(width: layout.toastFrame.width)
+          .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { toastHeight = $0 }
+          .padding(.leading, layout.toastFrame.minX)
           .transition(.move(edge: .top).combined(with: .opacity))
       }
     }
-    .padding(.top, edge.top)
+    .padding(.top, layout.edge.top)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    .animation(style.animation, value: taskbar?.id)
+    .animation(style.animation, value: controller.isToastVisible)
+  }
 
-    if isPanelVisible {
-      FloatingCornerPanel(style: style,
-                          size: size,
-                          cornerRadius: cornerRadius,
-                          tabs: tabs,
-                          selection: $selection,
-                          content: panelContent,
-                          onResize: { edge, translation, predicted in
-                            let start = cornerResizeStart ?? size
-                            if cornerResizeStart == nil { cornerResizeStart = start }
-                            var resized = layout.clamped(edge.apply(translation, to: start))
-                            if let predicted {
-                              // Released: width stays where it was dropped, height snaps.
-                              if edge.affectsHeight, configuration.cornerPanelSnapsVertically {
-                                resized.height = layout.snappedHeight(from: start.height,
-                                                                      predictedTranslation: predicted.height,
-                                                                      detents: configuration.detents)
-                              }
-                              cornerResizeStart = nil
-                              withAnimation(style.animation) { cornerSize = resized }
-                            } else {
-                              cornerSize = resized
-                            }
-                          })
-        .padding(.top, edge.top)
-        .padding(.leading, edge.leading)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .transition(.move(edge: .leading).combined(with: .opacity))
-        .animation(style.animation, value: isPanelVisible)
+  private func placeButtons(_ layout: ResolvedLayout) -> some View {
+    ButtonStack(style: style) { buttons() }
+      .onGeometryChange(for: CGSize.self) { $0.size } action: { buttonStackSize = $0 }
+      .padding(.top, layout.buttonStackTop)
+      .padding(.trailing, layout.edge.trailing)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+      .animation(style.animation, value: layout.buttonStackTop)
+  }
+
+  // MARK: - Gestures
+
+  /// A released height drag lands on the detent nearest its projected stop.
+  private func settleHeight(_ layout: ResolvedLayout, projecting projected: CGFloat) {
+    let resting = layout.heights.resolved(controller.detent)
+    let next = layout.heights.snappedDetent(from: resting, projecting: projected)
+    withAnimation(style.animation) {
+      controller.detent = next
+      heightDrag = 0
     }
   }
 
-  private var buttonStack: some View {
-    OverlayButtonStack(style: style,
-                       kinds: configuration.overlayButtons,
-                       showsVisibilityToggle: configuration.showsPanelVisibilityToggle,
-                       isPanelVisible: $isPanelVisible)
+  /// The wide panel's grips: width stays wherever it is dropped, height is a
+  /// detent and so snaps like a sheet's drag.
+  private func resize(_ layout: ResolvedLayout, edge: ResizeEdge,
+                      translation: CGSize, projecting projected: CGSize?) {
+    let start = resizeStart ?? CGSize(width: layout.panelFrame.width, height: layout.panelHeight)
+    resizeStart = start
+
+    if edge.affectsWidth {
+      panelWidth = layout.widths.clamped(start.width + translation.width)
+    }
+    if edge.affectsHeight {
+      heightDrag = translation.height
+    }
+
+    guard let projected else { return }
+    resizeStart = nil
+    if edge.affectsHeight {
+      settleHeight(layout, projecting: projected.height)
+    }
+  }
+}
+
+/// Everything one layout pass decided, read by every surface so no two of them
+/// compute the same number differently.
+private struct ResolvedLayout {
+
+  let mode: LayoutMode
+  let container: CGSize
+  let safeArea: EdgeInsets
+  /// The chrome's distance from the container's edges, before the safe area.
+  let margin: CGFloat
+  /// Where the chrome actually sits relative to each container edge.
+  let edge: EdgeInsets
+  let heights: PanelHeights
+  let widths: PanelWidths
+
+  var panelHeight: CGFloat = 0
+  var panelCornerRadius: CGFloat = 0
+  var barBottomInset: CGFloat = 0
+  var sheetLeadingInset: CGFloat = 0
+  var sheetTrailingInset: CGFloat = 0
+  var sheetBottomInset: CGFloat = 0
+  var buttonStackTop: CGFloat = 0
+
+  var panelFrame: CGRect = .zero
+  var toastFrame: CGRect = .zero
+  var buttonStackFrame: CGRect = .zero
+  var contentInsets: EdgeInsets = EdgeInsets()
+
+  /// The part the controller publishes, so a change it does not report — a
+  /// corner radius mid-dissolve — never churns the consumer's observation.
+  var geometry: ChromeGeometry {
+    ChromeGeometry(layoutMode: mode, contentInsets: contentInsets, panelFrame: panelFrame,
+                   toastFrame: toastFrame, buttonStackFrame: buttonStackFrame)
   }
 }

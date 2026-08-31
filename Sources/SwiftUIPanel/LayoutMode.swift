@@ -1,40 +1,17 @@
 import SwiftUI
 
-/// How the panel is presented.
-///
-/// Resolved from the window's width, so one view hierarchy serves a phone, a
-/// narrow iPad window, and a wide Mac window, and changes only its panel
-/// presentation as the window is resized. The consumer can still force a
-/// mode through the configuration.
+/// How the panel is presented at the container's current width.
 public enum LayoutMode: Sendable, Hashable {
-  /// Narrow: a sheet anchored to the bottom edge with detents.
+  /// Narrow: the panel is a bottom-anchored sheet.
   case bottomSheet
-  /// Regular and wide: one panel anchored top-left, resizable.
+  /// Wide: the panel floats top-leading.
   case floatingCorner
 
-  /// Whether the panel floats rather than sheets.
-  public var panelsFloat: Bool { self != .bottomSheet }
-
-  /// The mode a window of `width` points gets. Public so a consumer can make
-  /// the same decision — which tabs to offer where — from the same rule.
-  public static func resolve(width: CGFloat, configuration: Configuration) -> LayoutMode {
-    PlatformIdiom.resolve(override: configuration.layoutModeOverride, width: width, breakpoints: configuration.layoutBreakpoints)
-  }
-}
-
-/// The width at which the presentation changes.
-public struct PanelLayoutBreakpoints: Sendable, Hashable {
-  /// Below this, the panel becomes a bottom sheet. An iPhone in landscape
-  /// clears it; portrait does not.
-  public var narrowestFloatingWidth: CGFloat
-
-  public init(narrowestFloatingWidth: CGFloat = 700) {
-    self.narrowestFloatingWidth = narrowestFloatingWidth
-  }
-
-  public static let `default` = PanelLayoutBreakpoints()
-
-  func mode(for width: CGFloat) -> LayoutMode {
-    width < narrowestFloatingWidth ? .bottomSheet : .floatingCorner
+  /// The mode a container of `width` points gets.
+  ///
+  /// Public so you can make the same call the package does — which sections to
+  /// offer where, say — from the same rule.
+  public static func resolve(width: CGFloat, style: PanelStyle) -> LayoutMode {
+    width < style.narrowestFloatingWidth ? .bottomSheet : .floatingCorner
   }
 }

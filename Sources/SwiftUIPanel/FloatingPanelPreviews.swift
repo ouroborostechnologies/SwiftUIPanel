@@ -1,56 +1,63 @@
 import SwiftUI
 
-/// Stand-in full-bleed content with the panel attached, so every preview is
-/// one line.
-private struct PreviewHost: View {
-  
-  var configuration: Configuration = .default
-  
-  var taskbar: TemporaryTaskbarContent?
-  
-  @State private var selection = "a"
+/// The shell driven by the tab layer, at both layouts. The content underneath
+/// reads `contentInsets` and centres itself in what the chrome leaves clear,
+/// which is the fastest way to see whether the published geometry is honest.
+private struct PanelPreview: View {
+
+  let override: LayoutMode?
+
+  @State private var controller = PanelController()
+  @State private var section = "features"
+
+  private let tabs = [
+    PanelTab(id: "features", title: "Features", systemImage: "list.bullet"),
+    PanelTab(id: "properties", title: "Properties", systemImage: "slider.horizontal.3"),
+    PanelTab(id: "document", title: "Document", systemImage: "doc"),
+  ]
 
   var body: some View {
-    LinearGradient(colors: [.teal, .green], startPoint: .top, endPoint: .bottom)
-      .ignoresSafeArea()
-      .floatingPanel(
-        configuration: configuration,
-        tabs: [
-          FloatingPanelTab(id: "a", title: "A", systemImage: "a.circle"),
-          FloatingPanelTab(id: "b", title: "B", systemImage: "b.circle"),
-          FloatingPanelTab(id: "c", title: "C", systemImage: "c.circle")
-        ],
-        selection: $selection,
-        taskbar: taskbar
-      ) { tab in
-        Text(tab).frame(maxWidth: .infinity, maxHeight: .infinity)
+    LinearGradient(colors: [.teal, .indigo], startPoint: .top, endPoint: .bottom)
+      .overlay {
+        Text("Clear space")
+          .font(.title2)
+          .padding(controller.contentInsets)
       }
+      .floatingPanel(controller, tabs: tabs, selection: $section) { section in
+        ScrollView {
+          VStack(alignment: .leading, spacing: 8) {
+            ForEach(0 ..< 20, id: \.self) { row in
+              Text("\(section) \(row)")
+            }
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding()
+        }
+      } toast: {
+        HStack(spacing: 16) {
+          Text("Draw Polygon").font(.headline)
+          Button { controller.isToastVisible = false } label: { Image(systemName: "checkmark") }
+          Button { controller.isToastVisible = false } label: { Image(systemName: "xmark") }
+        }
+        .buttonStyle(.plain)
+      } buttons: {
+        PanelVisibilityToggle()
+        Button { controller.isToastVisible.toggle() } label: { Image(systemName: "pencil.tip") }
+        Button {} label: { Image(systemName: "plus") }
+          .buttonStyle(PanelButtonStyle(prominent: true))
+      }
+      .onAppear { controller.layoutModeOverride = override }
   }
 }
 
-#Preview("Default") {
-  PreviewHost()
+#Preview("Narrow") {
+  PanelPreview(override: .bottomSheet)
 }
 
-#Preview("Bottom sheet") {
-  PreviewHost(configuration: {
-    var c = Configuration()
-    c.layoutModeOverride = .bottomSheet
-    return c
-  }())
+#Preview("Wide") {
+  PanelPreview(override: .floatingCorner)
 }
 
-#Preview("Floating corner") {
-  PreviewHost(configuration: {
-    var c = Configuration()
-    c.layoutModeOverride = .floatingCorner
-    return c
-  }())
-}
-
-#Preview("Taskbar") {
-  PreviewHost(taskbar: TemporaryTaskbarContent(id: "measuring") {
-    Label("Measuring — tap to add points", systemImage: "ruler")
-      .padding(8)
-  })
+#Preview("Resolved from width") {
+  PanelPreview(override: nil)
 }

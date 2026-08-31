@@ -1,20 +1,24 @@
 import SwiftUI
 
-/// Tells a pointer user that an edge can be dragged.
-///
-/// - macOS 15 and later: the system's frame-resize arrows via `pointerStyle`.
-/// - macOS 14: the equivalent `NSCursor` pushed on hover.
-/// - iPadOS: iOS 17 exposes no resize-arrow pointer shape, so the pointer
-///   snaps onto the grip instead (`hoverEffect`), which is the platform's own
-///   cue for "this is draggable".
-struct ResizeCursorModifier: ViewModifier {
+extension View {
+  /// Tells a pointer user that this edge can be dragged.
+  func resizeCursor(_ edge: ResizeEdge) -> some View {
+    modifier(ResizeCursor(edge: edge))
+  }
+}
+
+/// The pointer cue for a resize grip, in whatever form the platform offers:
+/// the system's frame-resize arrows on macOS 15, the matching `NSCursor` on
+/// macOS 14, and — iOS exposing no resize-arrow shape — a pointer that snaps
+/// onto the grip on iPadOS.
+private struct ResizeCursor: ViewModifier {
 
   let edge: ResizeEdge
 
   func body(content: Content) -> some View {
     #if os(macOS)
     if #available(macOS 15, *) {
-      content.pointerStyle(.frameResize(position: position, directions: .all))
+      content.pointerStyle(.frameResize(position: framePosition, directions: .all))
     } else {
       content.onHover { hovering in
         if hovering { legacyCursor.push() } else { NSCursor.pop() }
@@ -27,7 +31,7 @@ struct ResizeCursorModifier: ViewModifier {
 
   #if os(macOS)
   @available(macOS 15, *)
-  private var position: FrameResizePosition {
+  private var framePosition: FrameResizePosition {
     switch edge {
     case .trailing: .trailing
     case .bottom: .bottom
@@ -45,10 +49,4 @@ struct ResizeCursorModifier: ViewModifier {
     }
   }
   #endif
-}
-
-extension View {
-  func resizeCursor(_ edge: ResizeEdge) -> some View {
-    modifier(ResizeCursorModifier(edge: edge))
-  }
 }
