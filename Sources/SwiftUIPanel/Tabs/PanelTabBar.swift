@@ -46,7 +46,7 @@ public struct PanelTabBar<ID: Hashable>: View {
         Image(systemName: tab.systemImage)
           .font(.title3.weight(.medium))
           .frame(height: style.tabIconHeight * iconScale)
-        Text(tab.title)
+        Text(LocalizedStringKey(tab.title))
           .font(.caption2)
       }
       .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
@@ -54,7 +54,7 @@ public struct PanelTabBar<ID: Hashable>: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityLabel(tab.title)
+    .accessibilityLabel(LocalizedStringKey(tab.title))
     .accessibilityAddTraits(isSelected ? [.isSelected] : [])
   }
 

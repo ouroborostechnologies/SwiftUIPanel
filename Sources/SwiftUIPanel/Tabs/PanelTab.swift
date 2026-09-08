@@ -4,6 +4,9 @@ import SwiftUI
 public struct PanelTab<ID: Hashable>: Identifiable, Hashable {
 
   public let id: ID
+  /// The label under the icon. Looked up in the app's string catalogue when
+  /// it is drawn, so a title given here in English localizes with everything
+  /// else and the package carries no resources of its own.
   public let title: String
   public let systemImage: String
 

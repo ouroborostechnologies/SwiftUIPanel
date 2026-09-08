@@ -7,22 +7,31 @@ import SwiftUI
 /// fresh instance and assign it to `PanelController.style`.
 ///
 /// ```swift
-/// panel.style.material = .thickMaterial
+/// panel.style.glass = .clear
 /// panel.style.panelWidth = 380
 /// ```
 public struct PanelStyle: Sendable {
 
   // MARK: Surfaces
 
-  /// The panel's and the toast's background.
-  public var material: Material = .regularMaterial
-  /// The buttons' background. Lighter, so content reads through them.
-  public var buttonMaterial: Material = .ultraThinMaterial
-  /// Panel and toast corners, and the floor under a concentric radius.
+  /// The Liquid Glass the panel and the toast are drawn on. Glass carries its
+  /// own shading and shadow, so neither surface draws one of its own.
+  public var glass: Glass = .regular
+  /// The buttons' glass. `interactive()` is applied by the button style, which
+  /// is the only place that knows whether a button is being pressed.
+  public var buttonGlass: Glass = .regular
+  /// What decides the appearance every glass surface renders in, content
+  /// included.
+  public var glassScheme: PanelGlassScheme = .adaptive
+  /// Panel and toast corners, and the floor under a concentric radius. Drawn
+  /// on all four corners of a surface unless something below reshapes them.
   public var cornerRadius: CGFloat = 16
-  public var shadowRadius: CGFloat = 8
-  public var shadowOpacity: Double = 0.15
-  public var shadowYOffset: CGFloat = 2
+  /// What a bottom sheet's top corners take of the radius its bottom corners
+  /// resolved to, on iOS. The sheet's bottom meets the display's own curve
+  /// while its top edge stands away from it, and a flatter top reads better
+  /// there — the same relationship the system's own sheets draw. `1` draws all
+  /// four corners alike.
+  public var sheetTopCornerScale: CGFloat = 0.7
   /// A control that is pressed, or showing an off state.
   public var dimmedOpacity: Double = 0.6
 
@@ -30,9 +39,9 @@ public struct PanelStyle: Sendable {
 
   /// The chrome's distance from the container's edges on narrow layouts. Where
   /// the safe area asks for more, the safe area wins.
-  public var edgeMarginCompact: CGFloat = 12
+  public var edgeMarginCompact: CGFloat = 8
   /// The same, on wide layouts.
-  public var edgeMarginRegular: CGFloat = 16
+  public var edgeMarginRegular: CGFloat = 12
   /// Between one chrome surface and the next.
   public var surfaceSpacing: CGFloat = 8
   /// Between the button stack's children.
@@ -103,4 +112,48 @@ public struct PanelStyle: Sendable {
   func edgeMargin(for mode: LayoutMode) -> CGFloat {
     mode == .bottomSheet ? edgeMarginCompact : edgeMarginRegular
   }
+
+  /// The panel's four corners on `mode`, given the uniform `radius` its
+  /// concentric fit resolved to.
+  ///
+  /// Two conditions have to hold for the top corners to be drawn tighter than
+  /// the bottom: the platform is iOS, and the width resolved to a sheet.
+  /// Anything else — a Mac window, an iPad wide enough for the corner panel —
+  /// keeps its four corners alike.
+  func panelCornerRadii(_ radius: CGFloat, mode: LayoutMode) -> RectangleCornerRadii {
+    #if os(iOS)
+    guard mode == .bottomSheet else { return RectangleCornerRadii(radius) }
+    let top = radius * min(max(sheetTopCornerScale, 0), 1)
+    return RectangleCornerRadii(topLeading: top, bottomLeading: radius,
+                                bottomTrailing: radius, topTrailing: top)
+    #else
+    return RectangleCornerRadii(radius)
+    #endif
+  }
+}
+
+public extension RectangleCornerRadii {
+
+  /// The same radius on all four corners.
+  init(_ radius: CGFloat) {
+    self.init(topLeading: radius, bottomLeading: radius,
+              bottomTrailing: radius, topTrailing: radius)
+  }
+}
+
+/// Where a glass surface takes its light or dark appearance from.
+///
+/// Liquid Glass lightens and darkens with whatever passes behind it, which
+/// over a map or a video means chrome that changes colour as the content moves
+/// under it. The other two cases take that decision away from the backdrop.
+public enum PanelGlassScheme: Sendable, Equatable {
+
+  /// Liquid Glass's own behaviour: light or dark by what is behind the
+  /// surface. The default, and what a surface over ordinary content wants.
+  case adaptive
+  /// Whatever the system appearance is set to, backdrop ignored — so the
+  /// chrome follows the user's light or dark setting and nothing else.
+  case system
+  /// One appearance, whatever the system and the backdrop are doing.
+  case fixed(ColorScheme)
 }

@@ -10,14 +10,18 @@ struct ButtonStack<Content: View>: View {
   @ViewBuilder let content: Content
 
   var body: some View {
-    VStack(spacing: style.buttonSpacing) {
-      content
+    // One container: the buttons' glass samples and blends as a single piece
+    // of material rather than as a column of unrelated lenses.
+    GlassEffectContainer(spacing: style.buttonSpacing) {
+      VStack(spacing: style.buttonSpacing) {
+        content
+      }
     }
     .buttonStyle(PanelButtonStyle())
   }
 }
 
-/// The circular material treatment the panel's buttons share.
+/// The circular glass treatment the panel's buttons share.
 ///
 /// Every button in the `buttons:` slot gets it by default. Apply it by hand to
 /// dress a button elsewhere, or to make one prominent:
@@ -26,6 +30,9 @@ struct ButtonStack<Content: View>: View {
 /// Button { add() } label: { Image(systemName: "plus") }
 ///     .buttonStyle(PanelButtonStyle(prominent: true))
 /// ```
+///
+/// Glass carries its own shadow and its own pressed response, so the style
+/// adds neither.
 public struct PanelButtonStyle: ButtonStyle {
 
   private let isProminent: Bool
@@ -34,8 +41,10 @@ public struct PanelButtonStyle: ButtonStyle {
   /// points.
   @ScaledMetric(relativeTo: .body) private var typeScale: CGFloat = 1
   @Environment(\.panelController) private var controller
+  /// See `PanelSurface`: read outside the glass so `.system` can re-assert it.
+  @Environment(\.colorScheme) private var environmentScheme
 
-  /// - Parameter prominent: fills the circle with the accent colour, for the
+  /// - Parameter prominent: tints the glass with the accent colour, for the
   ///   one primary action of a screen.
   public init(prominent: Bool = false) {
     self.isProminent = prominent
@@ -44,15 +53,15 @@ public struct PanelButtonStyle: ButtonStyle {
   public func makeBody(configuration: Configuration) -> some View {
     let style = controller?.style ?? .default
     let diameter = style.buttonDiameter * typeScale
+    let glass = isProminent ? style.buttonGlass.tint(.accentColor) : style.buttonGlass
     configuration.label
       .font(.body.weight(.medium))
       .imageScale(.medium)
       .foregroundStyle(isProminent ? AnyShapeStyle(.white) : AnyShapeStyle(Color.accentColor))
       .frame(width: diameter, height: diameter)
-      .background(Circle().fill(isProminent ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(style.buttonMaterial)))
-      .shadow(color: .black.opacity(style.shadowOpacity), radius: style.shadowRadius, y: style.shadowYOffset)
+      .glassEffect(glass.interactive(), in: .circle)
+      .panelColorScheme(style.glassScheme, environment: environmentScheme)
       .contentShape(Circle())
-      .opacity(configuration.isPressed ? style.dimmedOpacity : 1)
   }
 }
 
@@ -63,6 +72,8 @@ public struct PanelButtonStyle: ButtonStyle {
 public struct PanelVisibilityToggle: View {
 
   @Environment(\.panelController) private var controller
+  /// See `PanelSurface`: read outside the glass so `.system` can re-assert it.
+  @Environment(\.colorScheme) private var environmentScheme
 
   public init() {}
 
@@ -75,7 +86,7 @@ public struct PanelVisibilityToggle: View {
               ? "rectangle.bottomthird.inset.filled"
               : "rectangle.leadingthird.inset.filled")
       }
-      .accessibilityLabel(controller.isPanelVisible ? "Hide panel" : "Show panel")
+      .accessibilityLabel(controller.isPanelVisible ? "Hide Panel" : "Show Panel")
       .opacity(controller.isPanelVisible ? 1 : controller.style.dimmedOpacity)
     }
   }
