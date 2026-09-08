@@ -9,7 +9,7 @@ struct FloatingCornerPanel<Main: View, Bar: View>: View {
 
   let style: PanelStyle
   let size: CGSize
-  let cornerRadius: CGFloat
+  let cornerRadii: RectangleCornerRadii
   @ViewBuilder let main: Main
   @ViewBuilder let bar: Bar
   /// `projectedTranslation` is non-nil only on the drag that ends the resize.
@@ -23,7 +23,7 @@ struct FloatingCornerPanel<Main: View, Bar: View>: View {
       bar
     }
     .frame(width: size.width, height: size.height)
-    .panelSurface(style, cornerRadius: cornerRadius)
+    .panelSurface(style, cornerRadii: cornerRadii)
     .overlay(alignment: .trailing) { grip(.trailing) }
     .overlay(alignment: .bottom) { grip(.bottom) }
     .overlay(alignment: .bottomTrailing) { grip(.bottomTrailing) }

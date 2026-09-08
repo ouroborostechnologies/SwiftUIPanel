@@ -1,15 +1,35 @@
 import SwiftUI
 
-/// The column of controls at the container's top-trailing corner.
+/// A column of controls in the panel's chrome — the shape the top-trailing
+/// stack of a map or an editor takes.
 ///
 /// It spaces what it is given and makes `PanelButtonStyle` the default, so a
-/// plain `Button` arrives dressed. It never inspects its content.
-struct ButtonStack<Content: View>: View {
+/// plain `Button` arrives dressed. It never inspects its content, and it
+/// places itself nowhere: put it in one of the panel's containers and align it
+/// there.
+///
+/// ```swift
+/// .floatingPanel(panel) { … } bar: { … } panelTrailing: {
+///     PanelButtonStack {
+///         PanelVisibilityToggle()
+///         Button { add() } label: { Image(systemName: "plus") }
+///     }
+///     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+/// }
+/// ```
+public struct PanelButtonStack<Content: View>: View {
 
-  let style: PanelStyle
-  @ViewBuilder let content: Content
+  private let content: Content
 
-  var body: some View {
+  @Environment(\.panelController) private var controller
+
+  public init(@ViewBuilder content: () -> Content) {
+    self.content = content()
+  }
+
+  private var style: PanelStyle { controller?.style ?? .default }
+
+  public var body: some View {
     // One container: the buttons' glass samples and blends as a single piece
     // of material rather than as a column of unrelated lenses.
     GlassEffectContainer(spacing: style.buttonSpacing) {
@@ -23,8 +43,8 @@ struct ButtonStack<Content: View>: View {
 
 /// The circular glass treatment the panel's buttons share.
 ///
-/// Every button in the `buttons:` slot gets it by default. Apply it by hand to
-/// dress a button elsewhere, or to make one prominent:
+/// Every button inside a `PanelButtonStack` gets it by default. Apply it by
+/// hand to dress a button elsewhere, or to make one prominent:
 ///
 /// ```swift
 /// Button { add() } label: { Image(systemName: "plus") }
@@ -65,7 +85,7 @@ public struct PanelButtonStyle: ButtonStyle {
   }
 }
 
-/// A button that shows and hides the panel, for the `buttons:` slot.
+/// A button that shows and hides the panel.
 ///
 /// Optional and free-standing: place it where it belongs, or leave it out. Its
 /// glyph follows the panel to whichever edge the current layout anchors it to.

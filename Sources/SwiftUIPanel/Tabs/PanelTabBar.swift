@@ -3,8 +3,8 @@ import SwiftUI
 /// Icon-over-label tabs for the panel's bar slot, on every platform — rather
 /// than the Mac's usual sidebar.
 ///
-/// `View.floatingPanel(_:tabs:selection:main:toast:buttons:)` fills the bar
-/// with one of these. Place it in `bar:` yourself when you want the standard
+/// `View.floatingPanel(_:tabs:selection:main:toast:panelAligned:panelTrailing:)`
+/// fills the bar with one of these. Place it in `bar:` yourself when you want the standard
 /// bar but a `main:` of your own.
 public struct PanelTabBar<ID: Hashable>: View {
 

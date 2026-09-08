@@ -40,11 +40,22 @@ private struct PanelPreview: View {
           Button { controller.isToastVisible = false } label: { Image(systemName: "xmark") }
         }
         .buttonStyle(.plain)
-      } buttons: {
-        PanelVisibilityToggle()
-        Button { controller.isToastVisible.toggle() } label: { Image(systemName: "pencil.tip") }
-        Button {} label: { Image(systemName: "plus") }
-          .buttonStyle(PanelButtonStyle(prominent: true))
+      } panelAligned: {
+        // Anchored to the panel's free edge — above the sheet on narrow, under
+        // the panel on wide — and faded out once the panel fills the column.
+        Text("Aligned with the panel")
+          .font(.caption)
+          .padding(8)
+          .panelSurface(controller.style)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+      } panelTrailing: {
+        PanelButtonStack {
+          PanelVisibilityToggle()
+          Button { controller.isToastVisible.toggle() } label: { Image(systemName: "pencil.tip") }
+          Button {} label: { Image(systemName: "plus") }
+            .buttonStyle(PanelButtonStyle(prominent: true))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
       }
       .onAppear { controller.layoutModeOverride = override }
   }

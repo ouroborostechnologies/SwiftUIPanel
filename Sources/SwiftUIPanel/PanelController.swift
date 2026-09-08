@@ -3,7 +3,8 @@ import SwiftUI
 /// The state of one panel: what it shows, how it is sized, and what its chrome
 /// covers.
 ///
-/// Hold one per screen and hand it to `View.floatingPanel(_:main:bar:toast:buttons:)`.
+/// Hold one per screen and hand it to
+/// `View.floatingPanel(_:main:bar:toast:panelAligned:panelTrailing:)`.
 /// Set the properties above the divider to drive the chrome from anywhere in
 /// your view tree; read the ones below it to lay content out around what the
 /// chrome covers.
@@ -40,8 +41,9 @@ public final class PanelController {
   /// The layout the container's width resolved to.
   public private(set) var layoutMode: LayoutMode = .floatingCorner
   /// What the panel covers, per edge. Unused edges are zero, and a hidden
-  /// panel contributes nothing. The toast and the button stack float over the
-  /// content rather than displacing it, so neither shows up here.
+  /// panel contributes nothing. The toast and the two free-space containers float
+  /// over the content rather than displacing it, so none of them shows up
+  /// here.
   ///
   /// It tracks an interactive drag continuously, so content follows the moving
   /// edge instead of jumping when the drag ends.
@@ -56,8 +58,10 @@ public final class PanelController {
   public private(set) var panelFrame: CGRect = .zero
   /// The toast's frame. See `panelFrame`.
   public private(set) var toastFrame: CGRect = .zero
-  /// The button stack's frame. See `panelFrame`.
-  public private(set) var buttonStackFrame: CGRect = .zero
+  /// The frame of the container handed to `panelAligned:`. See `panelFrame`.
+  public private(set) var panelAlignedFrame: CGRect = .zero
+  /// The frame of the container handed to `panelTrailing:`. See `panelFrame`.
+  public private(set) var panelTrailingFrame: CGRect = .zero
 
   public init() {}
 
@@ -67,7 +71,8 @@ public final class PanelController {
     contentInsets = geometry.contentInsets
     panelFrame = geometry.panelFrame
     toastFrame = geometry.toastFrame
-    buttonStackFrame = geometry.buttonStackFrame
+    panelAlignedFrame = geometry.panelAlignedFrame
+    panelTrailingFrame = geometry.panelTrailingFrame
   }
 }
 
@@ -78,7 +83,8 @@ struct ChromeGeometry: Equatable {
   var contentInsets: EdgeInsets
   var panelFrame: CGRect
   var toastFrame: CGRect
-  var buttonStackFrame: CGRect
+  var panelAlignedFrame: CGRect
+  var panelTrailingFrame: CGRect
 }
 
 private struct PanelControllerKey: EnvironmentKey {
@@ -87,7 +93,7 @@ private struct PanelControllerKey: EnvironmentKey {
 
 public extension EnvironmentValues {
   /// The controller driving the chrome this view sits in, if any. Set by
-  /// `View.floatingPanel(_:main:bar:toast:buttons:)`.
+  /// `View.floatingPanel(_:main:bar:toast:panelAligned:panelTrailing:)`.
   internal(set) var panelController: PanelController? {
     get { self[PanelControllerKey.self] }
     set { self[PanelControllerKey.self] = newValue }

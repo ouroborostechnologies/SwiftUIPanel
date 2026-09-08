@@ -8,7 +8,7 @@ import SwiftUI
 private struct PanelSurface: ViewModifier {
 
   let style: PanelStyle
-  let cornerRadius: CGFloat
+  let cornerRadii: RectangleCornerRadii
   /// Read outside the glass, so `.system` re-asserts the appearance the app is
   /// actually running in rather than the one the glass resolved for itself.
   @Environment(\.colorScheme) private var environmentScheme
@@ -20,17 +20,18 @@ private struct PanelSurface: ViewModifier {
       .panelColorScheme(style.glassScheme, environment: environmentScheme)
   }
 
-  private var shape: RoundedRectangle {
-    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+  private var shape: UnevenRoundedRectangle {
+    UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
   }
 }
 
 extension View {
 
-  /// Draws this content as a floating surface. `cornerRadius: nil` uses the
-  /// style's own.
-  func panelSurface(_ style: PanelStyle, cornerRadius: CGFloat? = nil) -> some View {
-    modifier(PanelSurface(style: style, cornerRadius: cornerRadius ?? style.cornerRadius))
+  /// Draws this content as a floating surface. `cornerRadii: nil` draws the
+  /// style's own radius on all four corners.
+  func panelSurface(_ style: PanelStyle, cornerRadii: RectangleCornerRadii? = nil) -> some View {
+    modifier(PanelSurface(style: style,
+                          cornerRadii: cornerRadii ?? RectangleCornerRadii(style.cornerRadius)))
   }
 
   /// Pins the appearance a glass surface and its content render in.

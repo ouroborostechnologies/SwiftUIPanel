@@ -82,7 +82,7 @@ struct PanelHeights: Equatable {
 struct PanelWidths: Equatable {
 
   let configuredRange: ClosedRange<CGFloat>
-  /// The container less its margins, safe areas, and the button stack.
+  /// The container less its margins and safe areas.
   let available: CGFloat
 
   /// `configuredRange`, capped by the room actually available.
@@ -109,13 +109,12 @@ enum ResizeEdge {
 /// Where the toast sits along the container's top edge on a wide layout.
 ///
 /// It belongs to the container, so it is centred on the container — then slid,
-/// never squeezed, far enough to clear the panel on one side and the button
-/// stack on the other. Only a strip narrower than the toast wants costs it
-/// width.
+/// never squeezed, far enough to clear the panel beside it. Only a strip
+/// narrower than the toast wants costs it width.
 struct ToastSpan: Equatable {
 
   let containerWidth: CGFloat
-  /// The leading edge of the strip left free between the panel and the stack.
+  /// The leading edge of the strip left free beside the panel.
   let stripLeading: CGFloat
   /// Its trailing edge.
   let stripTrailing: CGFloat
@@ -146,6 +145,86 @@ extension EdgeInsets {
   }
 }
 
+/// The two free-space containers the consumer fills, derived from the same
+/// numbers the panel was drawn with — so an area can never overlap the panel
+/// it is measured from.
+///
+/// Both are plain rectangles. Neither knows anything about what goes in it:
+/// the consumer aligns their own content inside with the standard frame
+/// alignments.
+struct PanelRegions: Equatable {
+
+  let mode: LayoutMode
+  let container: CGSize
+  /// Where the chrome sits relative to each container edge.
+  let edge: EdgeInsets
+  /// The panel's frame. Empty when the panel is off screen, which hands its
+  /// space back to the areas rather than leaving a hole where it was.
+  let panelFrame: CGRect
+  /// The width of the panel's column on wide layouts, whether or not the panel
+  /// is on screen — so the aligned area keeps that column either way.
+  let panelWidth: CGFloat
+  /// Where an area may start at the top: below the toast wherever one is
+  /// showing, and at the top inset when none is.
+  let contentTop: CGFloat
+  /// Between the panel and an area measured from it.
+  let spacing: CGFloat
+  /// The band of height across which the aligned area fades as the panel grows
+  /// into it.
+  let fadeDistance: CGFloat
+
+  /// The area sharing the panel's column, anchored to the edge the panel is
+  /// *not* anchored to: above a bottom sheet, below a floating corner panel.
+  var aligned: CGRect {
+    switch mode {
+    case .bottomSheet:
+      // Full width, from under the toast down to the sheet's top edge.
+      let bottom = panelFrame.isEmpty ? bottomLimit : panelFrame.minY - spacing
+      return rect(leading: edge.leading, trailing: container.width - edge.trailing,
+                  top: contentTop, bottom: bottom)
+    case .floatingCorner:
+      // The panel's own column, from under the panel down to the bottom inset.
+      let top = panelFrame.isEmpty ? contentTop : panelFrame.maxY + spacing
+      return rect(leading: edge.leading, trailing: edge.leading + panelWidth,
+                  top: top, bottom: bottomLimit)
+    }
+  }
+
+  /// The area on the panel's trailing side.
+  ///
+  /// On a wide layout that is the strip between the panel and the container's
+  /// trailing edge. A bottom sheet spans the full width and leaves no such
+  /// strip, so there the area is the whole inset container and floats over the
+  /// sheet — which is where a column of controls belongs on either layout.
+  var trailing: CGRect {
+    let leading = mode == .floatingCorner && !panelFrame.isEmpty
+      ? panelFrame.maxX + spacing
+      : edge.leading
+    return rect(leading: leading, trailing: container.width - edge.trailing,
+                top: contentTop, bottom: bottomLimit)
+  }
+
+  /// How solid the aligned area is: full until the panel has grown to within
+  /// `fadeDistance` of filling its column, then out.
+  ///
+  /// Read from the area's live height rather than from the detent, so a panel
+  /// dragged open fades it out continuously and dragging back down fades it in
+  /// again.
+  var alignedOpacity: Double {
+    guard fadeDistance > 0 else { return aligned.height > 0 ? 1 : 0 }
+    return Double(min(max(aligned.height / fadeDistance, 0), 1))
+  }
+
+  private var bottomLimit: CGFloat { container.height - edge.bottom }
+
+  /// A rect from four edges, collapsed rather than inverted when they cross.
+  private func rect(leading: CGFloat, trailing: CGFloat,
+                    top: CGFloat, bottom: CGFloat) -> CGRect {
+    CGRect(x: leading, y: top,
+           width: max(trailing - leading, 0), height: max(bottom - top, 0))
+  }
+}
+
 /// What the panel covers, for the content underneath.
 enum ChromeInsets {
 
@@ -153,9 +232,9 @@ enum ChromeInsets {
   /// at — so the two cannot disagree.
   ///
   /// The panel covers the bottom on narrow and a leading column on wide. Only
-  /// the panel counts: the toast and the button stack float over the content
-  /// rather than displacing it, so showing or hiding either leaves the content
-  /// where it was. An empty frame is a hidden panel and covers nothing.
+  /// the panel counts: the toast and the two free-space containers float over
+  /// the content rather than displacing it, so showing or hiding any of them
+  /// leaves the content where it was. An empty frame is a hidden panel and covers nothing.
   static func covering(panel: CGRect, in container: CGSize, mode: LayoutMode) -> EdgeInsets {
     var insets = EdgeInsets()
     guard !panel.isEmpty else { return insets }

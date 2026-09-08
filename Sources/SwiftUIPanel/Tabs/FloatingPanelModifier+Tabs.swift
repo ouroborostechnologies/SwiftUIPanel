@@ -9,20 +9,24 @@ public extension View {
   /// MyContent()
   ///     .floatingPanel(panel, tabs: tabs, selection: $section) { section in
   ///         SectionBody(section)
-  ///     } buttons: {
-  ///         PanelVisibilityToggle()
+  ///     } panelTrailing: {
+  ///         PanelButtonStack { PanelVisibilityToggle() }
+  ///             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
   ///     }
   /// ```
   ///
-  /// A convenience over `floatingPanel(_:main:bar:toast:buttons:)` with `bar:`
+  /// A convenience over
+  /// `floatingPanel(_:main:bar:toast:panelAligned:panelTrailing:)` with `bar:`
   /// filled in; write your own bar there when these tabs do not suit.
-  func floatingPanel<ID: Hashable, Main: View, ToastContent: View, Buttons: View>(
+  func floatingPanel<ID: Hashable, Main: View, ToastContent: View,
+                     Aligned: View, Trailing: View>(
     _ controller: PanelController,
     tabs: [PanelTab<ID>],
     selection: Binding<ID>,
     @ViewBuilder main: @escaping (ID) -> Main,
     @ViewBuilder toast: @escaping () -> ToastContent = { EmptyView() },
-    @ViewBuilder buttons: @escaping () -> Buttons = { EmptyView() }
+    @ViewBuilder panelAligned: @escaping () -> Aligned = { EmptyView() },
+    @ViewBuilder panelTrailing: @escaping () -> Trailing = { EmptyView() }
   ) -> some View {
     floatingPanel(controller) {
       main(selection.wrappedValue)
@@ -30,8 +34,10 @@ public extension View {
       PanelTabBar(tabs, selection: selection)
     } toast: {
       toast()
-    } buttons: {
-      buttons()
+    } panelAligned: {
+      panelAligned()
+    } panelTrailing: {
+      panelTrailing()
     }
   }
 }

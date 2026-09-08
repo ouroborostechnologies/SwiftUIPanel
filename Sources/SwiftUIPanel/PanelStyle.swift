@@ -44,7 +44,7 @@ public struct PanelStyle: Sendable {
   public var edgeMarginRegular: CGFloat = 12
   /// Between one chrome surface and the next.
   public var surfaceSpacing: CGFloat = 8
-  /// Between the button stack's children.
+  /// Between a `PanelButtonStack`'s children.
   public var buttonSpacing: CGFloat = 8
   /// Inside a surface, around the content it was given.
   public var surfacePaddingHorizontal: CGFloat = 12
@@ -61,8 +61,8 @@ public struct PanelStyle: Sendable {
   /// What a width resize may reach, capped again by the room beside the button
   /// stack. Height has no equivalent: it is a detent, on both layouts.
   public var panelWidthRange: ClosedRange<CGFloat> = 280 ... 520
-  /// The toast's width on wide layouts, capped by the strip left free between
-  /// the panel and the button stack.
+  /// The toast's width on wide layouts, capped by the strip left free beside
+  /// the panel.
   public var toastWidth: CGFloat = 560
   /// Below this container width the panel is a bottom sheet; at or above it, a
   /// floating corner panel.
@@ -89,6 +89,10 @@ public struct PanelStyle: Sendable {
   /// The band below `.full` across which a bottom sheet's margins dissolve
   /// into an edge-to-edge surface.
   public var marginDissolveDistance: CGFloat = 64
+  /// The last band of its own height across which the `panelAligned:`
+  /// container fades, as the panel grows into the column they share. Zero
+  /// switches it out the moment it has no room left, with no fade.
+  public var alignedFadeDistance: CGFloat = 96
   /// Applied to every detent, resize, and visibility change.
   public var animation: Animation = .spring(response: 0.4, dampingFraction: 0.85)
 

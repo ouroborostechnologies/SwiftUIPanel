@@ -264,11 +264,115 @@ struct PanelControllerTests {
   func publish() {
     let controller = PanelController()
     let panel = CGRect(x: 16, y: 16, width: 340, height: 500)
+    let trailing = CGRect(x: 364, y: 16, width: 1020, height: 868)
     controller.report(ChromeGeometry(layoutMode: .floatingCorner,
                                      contentInsets: EdgeInsets(top: 0, leading: 356, bottom: 0, trailing: 0),
-                                     panelFrame: panel, toastFrame: .zero, buttonStackFrame: .zero))
+                                     panelFrame: panel, toastFrame: .zero,
+                                     panelAlignedFrame: .zero, panelTrailingFrame: trailing))
     #expect(controller.layoutMode == .floatingCorner)
     #expect(controller.contentInsets.leading == 356)
     #expect(controller.panelFrame == panel)
+    #expect(controller.panelTrailingFrame == trailing)
+  }
+}
+
+@Suite("Panel regions")
+struct PanelRegionsTests {
+
+  /// An iPhone: a 393×852 container, an 8pt margin, safe areas top and bottom,
+  /// and a sheet resting half open.
+  private func narrow(panel: CGRect = CGRect(x: 8, y: 480, width: 377, height: 344),
+                      contentTop: CGFloat = 59) -> PanelRegions {
+    PanelRegions(mode: .bottomSheet,
+                 container: CGSize(width: 393, height: 852),
+                 edge: EdgeInsets(top: 59, leading: 8, bottom: 34, trailing: 8),
+                 panelFrame: panel, panelWidth: 377,
+                 contentTop: contentTop, spacing: 8, fadeDistance: 96)
+  }
+
+  /// A 1400×900 window: a 340pt panel one 16pt margin in from the top-leading
+  /// corner, 500pt tall.
+  private func wide(panel: CGRect = CGRect(x: 16, y: 16, width: 340, height: 500)) -> PanelRegions {
+    PanelRegions(mode: .floatingCorner,
+                 container: CGSize(width: 1400, height: 900),
+                 edge: EdgeInsets(margin: 16, clearing: EdgeInsets()),
+                 panelFrame: panel, panelWidth: 340,
+                 contentTop: 16, spacing: 8, fadeDistance: 96)
+  }
+
+  @Test("On narrow the aligned area is the full width above the sheet")
+  func narrowAligned() {
+    let aligned = narrow().aligned
+    #expect(aligned.minX == 8)
+    #expect(aligned.width == 377)
+    #expect(aligned.minY == 59)
+    // Its bottom edge sits one spacing above the sheet's top.
+    #expect(aligned.maxY == 472)
+  }
+
+  @Test("On wide the aligned area is the panel's own column, under the panel")
+  func wideAligned() {
+    let aligned = wide().aligned
+    #expect(aligned.minX == 16)
+    #expect(aligned.width == 340)
+    #expect(aligned.minY == 524)
+    #expect(aligned.maxY == 884)
+  }
+
+  @Test("A panel that fills its column leaves no aligned area, and no negative one")
+  func alignedCollapses() {
+    // A sheet dragged past its top inset: the area would be inverted.
+    let aligned = narrow(panel: CGRect(x: 0, y: 40, width: 393, height: 812)).aligned
+    #expect(aligned.height == 0)
+    #expect(aligned.width == 377)
+  }
+
+  @Test("The aligned area fades over the last band of its own height")
+  func alignedFade() {
+    #expect(narrow().alignedOpacity == 1)
+    // 48pt of room left, half the 96pt fade band.
+    #expect(narrow(panel: CGRect(x: 8, y: 115, width: 377, height: 709)).alignedOpacity == 0.5)
+    #expect(narrow(panel: CGRect(x: 0, y: 40, width: 393, height: 812)).alignedOpacity == 0)
+  }
+
+  @Test("On wide the trailing area is the strip beside the panel")
+  func wideTrailing() {
+    let trailing = wide().trailing
+    #expect(trailing.minX == 364)
+    #expect(trailing.maxX == 1384)
+    #expect(trailing.minY == 16)
+    #expect(trailing.maxY == 884)
+  }
+
+  @Test("On narrow the sheet leaves no strip, so the trailing area is the whole inset container")
+  func narrowTrailing() {
+    let trailing = narrow().trailing
+    #expect(trailing.minX == 8)
+    #expect(trailing.width == 377)
+    #expect(trailing.minY == 59)
+    #expect(trailing.maxY == 818)
+    // It floats over the sheet rather than stopping at it, so controls stay
+    // reachable at every detent.
+    #expect(trailing.maxY > narrow().panelFrame.minY)
+  }
+
+  @Test("A visible toast pushes both areas below it")
+  func clearsToast() {
+    let regions = narrow(contentTop: 120)
+    #expect(regions.aligned.minY == 120)
+    #expect(regions.trailing.minY == 120)
+  }
+
+  @Test("A hidden panel hands its space back to both areas")
+  func hiddenPanel() {
+    let sheet = narrow(panel: .zero)
+    #expect(sheet.aligned.maxY == 818)
+    #expect(sheet.aligned.height == 759)
+
+    let corner = wide(panel: .zero)
+    // The column stays the panel's width, so content in it does not jump when
+    // the panel comes back.
+    #expect(corner.aligned == CGRect(x: 16, y: 16, width: 340, height: 868))
+    #expect(corner.trailing.minX == 16)
   }
 }
