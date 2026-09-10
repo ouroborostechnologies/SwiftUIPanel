@@ -1,8 +1,8 @@
 # SwiftUIPanel
 
 A cross-platform SwiftUI package (iOS / iPadOS / macOS) that overlays a floating panel, a toast,
-and a stack of buttons on top of a full-bleed content view, and publishes the region they leave
-unobstructed.
+and two free-space containers on top of a full-bleed content view, and publishes the region they
+leave unobstructed.
 
 The package is **content-agnostic**: it draws chrome, resolves layout, and reports geometry. Every
 slot is a `@ViewBuilder`, and no type in its API is named after a domain. See
@@ -15,39 +15,44 @@ narrow iPad split view, and a wide Mac window share one tree and change only how
 presented as the window resizes. `PanelStyle.narrowestFloatingWidth` is the threshold;
 `PanelController.layoutModeOverride` forces a mode.
 
-**Wide** — the panel floats top-leading, the toast sits top-centre, the buttons run down the
-trailing edge.
+**Wide** — the panel floats top-leading and the toast sits top-centre. `panelAligned` is the
+panel's own column below it; `panelTrailing` is the strip beside it.
 
 ```
 ┌────────────────────────────────────┐
-│  ┌─────────┐   ┌─────────┐      ○  │
-│  │  main   │   │  toast  │      ○  │
-│  │         │   └─────────┘      ○  │
-│  ├─────────┤                       │
-│  │   bar   │                       │
-│  └─────────┘                       │
-│                                    │
+│  ┌─────────┐   ┌─────────┐         │
+│  │  main   │   │  toast  │         │
+│  │         │   └─────────┘         │
+│  ├─────────┤  ┌──────────────────┐ │
+│  │   bar   │  │                  │ │
+│  └─────────┘  │  panelTrailing   │ │
+│  ┌─────────┐  │                  │ │
+│  │ aligned │  │                  │ │
+│  └─────────┘  └──────────────────┘ │
 └────────────────────────────────────┘
 ```
 
 The panel is resized from its trailing edge, its bottom edge, or the corner between them (the
-grips draw nothing; the pointer changing is the cue). Width moves freely inside
-`panelWidthRange` and never reaches the buttons; height is a detent. The toast takes
-`toastWidth`, capped by the strip left free between the two — centred on the container, then slid
-clear rather than squeezed.
+grips draw nothing; the pointer changing is the cue). Width moves freely inside `panelWidthRange`;
+height is a detent. The toast takes `toastWidth`, capped by the strip left free beside the panel —
+centred on the container, then slid clear rather than squeezed.
 
 **Narrow** — the panel becomes a bottom sheet. The toast keeps the top, at the panel's width so
-the two align on either edge, and the button stack steps below it.
+the two align on either edge. `panelAligned` is everything between the toast and the sheet's top
+edge; `panelTrailing`, with no strip left to occupy, is the whole inset container and floats over
+the sheet — which is where a column of controls belongs on either layout.
 
 ```
 ┌──────────────────────┐
 │  ┌────────────────┐  │
 │  │     toast      │  │
 │  └────────────────┘  │
-│                   ○  │
-│                   ○  │
-│                   ○  │
-│                      │
+│  ┌────────────────┐  │
+│  │                │  │
+│  │  panelAligned  │  │
+│  │   (over it,    │  │
+│  │ panelTrailing) │  │
+│  └────────────────┘  │
 │  ┌────────────────┐  │
 │  │      main      │  │
 │  ├────────────────┤  │
@@ -83,13 +88,39 @@ display's own curvature.
 `PanelController.detents` — two, or four — and the drag, the snapping, and the wide panel's
 vertical resize all read them.
 
+### The containers
+
+`panelAligned:` and `panelTrailing:` are containers, not slots. Each is handed a rectangle of the
+space the panel leaves free — measured from the frame the panel was actually drawn at, inside the
+safe area, and below the toast when one is showing — and what goes where inside it is decided the
+ordinary way:
+
+```swift
+panelTrailing: {
+    Legend()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+}
+```
+
+Content that fills neither dimension is centred. The package positions nothing inside them and
+inspects nothing they contain.
+
+`panelAligned` shares the panel's column and anchors to the edge the panel does *not*: above a
+bottom sheet, below a floating corner panel. It shrinks as the panel grows into that column and
+fades out over the last `alignedFadeDistance` points of its own height — continuously, so dragging
+the panel back down fades it in again. Faded out, it stops taking taps.
+
+`panelTrailing` sits on the panel's trailing side, and on narrow layouts spans the whole inset
+container.
+
 ### The toast and the buttons
 
 The toast shares the panel's chrome and belongs to the container, not to the panel: it never
 moves, resizes, or collapses it, and the package never dismisses it — `isToastVisible` is yours.
 
-The button stack takes consumer views and applies the shared circular chrome to its subtree as the
-default button style, so a plain `Button` arrives dressed.
+`PanelButtonStack` takes consumer views and applies the shared circular chrome to its subtree as
+the default button style, so a plain `Button` arrives dressed. It places itself nowhere: put it in
+a container and align it there.
 
 The chrome floats over the content and never pushes it. What it covers is reported through the
 controller.
@@ -107,9 +138,15 @@ MyContentView()                       // already ignoring the safe area
       SectionPicker($section)         // bar slot — visible at every detent
   } toast: {
       EditingControls()
-  } buttons: {
-      PanelVisibilityToggle()
-      Button { locate() } label: { Image(systemName: "location") }
+  } panelAligned: {
+      ScaleBar()                      // rides the panel's free edge, fades as it opens
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+  } panelTrailing: {
+      PanelButtonStack {
+          PanelVisibilityToggle()
+          Button { locate() } label: { Image(systemName: "location") }
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
   }
 ```
 
@@ -120,8 +157,9 @@ primitive — built out of the public API, and deletable without the engine noti
 MyContentView()
   .floatingPanel(panel, tabs: tabs, selection: $section) { section in
       SectionBody(section)
-  } buttons: {
-      PanelVisibilityToggle()
+  } panelTrailing: {
+      PanelButtonStack { PanelVisibilityToggle() }
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
   }
 ```
 
@@ -140,10 +178,11 @@ panel.style                   // every number and material, in one place, at run
 panel.layoutModeOverride      // forces a layout; nil resolves from the width
 
 panel.layoutMode              // published: what the width resolved to
-panel.contentInsets           // published: what all three surfaces cover, live mid-drag
+panel.contentInsets           // published: what the panel covers, live mid-drag
 panel.panelFrame              // published: raw frames, for non-SwiftUI inset APIs
 panel.toastFrame
-panel.buttonStackFrame
+panel.panelAlignedFrame       // published: the two containers' rectangles
+panel.panelTrailingFrame
 ```
 
 ```swift
@@ -168,10 +207,10 @@ Sources/SwiftUIPanel/
   BottomSheetPanel.swift       // narrow layout + drag
   FloatingCornerPanel.swift    // wide layout + resize
   Toast.swift
-  ButtonStack.swift            // + PanelButtonStyle, PanelVisibilityToggle
+  PanelButtonStack.swift       // + PanelButtonStyle, PanelVisibilityToggle
   PanelSurface.swift           // shared material/radius/shadow treatment
 
-  PanelLayoutMath.swift        // detent, toast, and inset arithmetic — pure and unit-tested
+  PanelLayoutMath.swift        // detent, toast, region, and inset arithmetic — pure and unit-tested
   ContainerCornerRadius.swift
   ResizeCursor.swift
 

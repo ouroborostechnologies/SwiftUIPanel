@@ -22,7 +22,7 @@ public struct PanelStyle: Sendable {
   public var buttonGlass: Glass = .regular
   /// What decides the appearance every glass surface renders in, content
   /// included.
-  public var glassScheme: PanelGlassScheme = .adaptive
+  public var glassScheme: PanelGlassScheme = .system
   /// Panel and toast corners, and the floor under a concentric radius. Drawn
   /// on all four corners of a surface unless something below reshapes them.
   public var cornerRadius: CGFloat = 16

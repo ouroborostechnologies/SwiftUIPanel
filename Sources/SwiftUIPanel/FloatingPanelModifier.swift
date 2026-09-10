@@ -154,7 +154,6 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
     let resting = layout.heights.resolved(controller.detent)
     let height = layout.heights.height(from: resting, draggedBy: heightDrag)
     let dissolve = layout.heights.dissolveProgress(atHeight: height)
-    layout.isFullyOpen = resting == layout.heights.largest
 
     layout.sheetLeadingInset = layout.edge.leading * (1 - dissolve)
     layout.sheetTrailingInset = layout.edge.trailing * (1 - dissolve)
@@ -179,10 +178,8 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
 
   private func resolveCornerPanel(_ layout: inout ResolvedLayout) {
     let resting = layout.heights.resolved(controller.detent)
-    // Dragging the bottom edge down grows the panel, where dragging a sheet
-    // down shrinks it.
     layout.panelSize = CGSize(width: layout.widths.clamped(panelWidth ?? style.panelWidth),
-                              height: layout.heights.height(from: resting, draggedBy: -heightDrag))
+                              height: layout.heights.height(from: resting, draggedBy: heightDrag))
     layout.panelCornerRadii = style.panelCornerRadii(
       ContainerCornerRadius.concentric(inset: layout.margin, fallback: style.cornerRadius),
       mode: layout.mode)
@@ -278,7 +275,6 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
                        height: layout.panelSize.height,
                        cornerRadii: layout.panelCornerRadii,
                        barBottomInset: layout.barBottomInset,
-                       isFullyOpen: layout.isFullyOpen,
                        main: { main() },
                        bar: { bar() },
                        onBarHeightChange: { barHeight = $0 },
@@ -343,14 +339,17 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
     if edge.affectsWidth {
       panelWidth = layout.widths.clamped(start.width + translation.width)
     }
+    // Dragging the bottom edge down grows the wide panel, where dragging a
+    // sheet down shrinks it. Negated here, once, so everything downstream —
+    // the live height and the snap alike — reads the one convention.
     if edge.affectsHeight {
-      heightDrag = translation.height
+      heightDrag = -translation.height
     }
 
     guard let projected else { return }
     resizeStart = nil
     if edge.affectsHeight {
-      settleHeight(layout, projecting: projected.height)
+      settleHeight(layout, projecting: -projected.height)
     }
   }
 }
@@ -374,10 +373,7 @@ private struct ResolvedLayout {
   /// collapsing to nothing.
   var panelSize: CGSize = .zero
   var panelCornerRadii = RectangleCornerRadii(0)
-  /// Whether the panel is resting at its tallest detent, where a sheet hands
-  /// its drag over to a scroll view in the main slot.
-  var isFullyOpen = false
-  /// The same, for the toast.
+  /// The toast's placement.
   var toastOriginX: CGFloat = 0
   var toastWidth: CGFloat = 0
   var barBottomInset: CGFloat = 0
