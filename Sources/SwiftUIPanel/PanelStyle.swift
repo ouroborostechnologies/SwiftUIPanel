@@ -32,8 +32,10 @@ public struct PanelStyle: Sendable {
   /// there — the same relationship the system's own sheets draw. `1` draws all
   /// four corners alike.
   public var sheetTopCornerScale: CGFloat = 0.7
-  /// A control that is pressed, or showing an off state.
-  public var dimmedOpacity: Double = 0.6
+  /// How dark the scrim behind a bottom sheet gets at `.full`, on iOS. It
+  /// rises with the sheet's margin dissolve, so it tracks a drag rather than
+  /// switching on at the detent. Zero turns it off.
+  public var scrimOpacity: Double = 0.3
 
   // MARK: Spacing
 

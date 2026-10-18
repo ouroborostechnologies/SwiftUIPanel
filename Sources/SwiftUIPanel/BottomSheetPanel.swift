@@ -50,7 +50,7 @@ struct BottomSheetPanel<Main: View, Bar: View>: View {
 
   private var handle: some View {
     Capsule()
-      .fill(.tertiary)
+      .fill(.secondary)
       .frame(width: style.dragHandleWidth, height: style.dragHandleHeight)
       .padding(.vertical, style.surfacePaddingVertical)
       .frame(maxWidth: .infinity)

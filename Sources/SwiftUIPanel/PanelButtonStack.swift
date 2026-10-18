@@ -107,7 +107,6 @@ public struct PanelVisibilityToggle: View {
               : "rectangle.leadingthird.inset.filled")
       }
       .accessibilityLabel(controller.isPanelVisible ? "Hide Panel" : "Show Panel")
-      .opacity(controller.isPanelVisible ? 1 : controller.style.dimmedOpacity)
     }
   }
 }

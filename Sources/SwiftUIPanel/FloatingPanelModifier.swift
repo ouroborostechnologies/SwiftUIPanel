@@ -93,6 +93,7 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
         place(panelAligned(), in: layout.alignedFrame, opacity: layout.alignedOpacity)
         place(panelTrailing(), in: layout.trailingFrame)
         placeToast(layout)
+        placeScrim(layout)
         placePanel(layout)
       }
       .frame(width: layout.container.width, height: layout.container.height)
@@ -171,6 +172,9 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
       mode: layout.mode)
 
     guard controller.isPanelVisible else { return }
+    #if os(iOS)
+    layout.scrimOpacity = style.scrimOpacity * dissolve
+    #endif
     layout.panelFrame = CGRect(origin: CGPoint(x: layout.sheetLeadingInset,
                                                y: layout.container.height - bottomClearance - height),
                                size: layout.panelSize)
@@ -250,6 +254,16 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
       .padding(.leading, frame.minX)
       .padding(.top, frame.minY)
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+      .animation(style.animation, value: controller.isPanelVisible)
+  }
+
+  /// Under the panel and over everything else, so the whole screen recedes
+  /// behind a sheet at `.full` while the sheet itself stays bright. It only
+  /// dims: taps go through to whatever it covers.
+  private func placeScrim(_ layout: ResolvedLayout) -> some View {
+    Color.black
+      .opacity(layout.scrimOpacity)
+      .allowsHitTesting(false)
       .animation(style.animation, value: controller.isPanelVisible)
   }
 
@@ -382,6 +396,9 @@ private struct ResolvedLayout {
   var sheetBottomInset: CGFloat = 0
   /// How solid the aligned area is, given how far the panel has grown into it.
   var alignedOpacity: Double = 1
+  /// How dark the screen behind the panel is. Zero everywhere but a sheet
+  /// near `.full` on iOS.
+  var scrimOpacity: Double = 0
 
   var panelFrame: CGRect = .zero
   var toastFrame: CGRect = .zero
