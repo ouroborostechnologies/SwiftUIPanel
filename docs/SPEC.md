@@ -140,6 +140,13 @@ assumes three.
   placeholder and corrects before anything is on screen (§1.2).
 - **`.full` is all of the available height**, which already excludes safe areas and
   margins — so it leaves the top inset clear rather than covering the display.
+- **A docked keyboard raises a sheet.** While one is up the sheet rises to its
+  largest detent, so what is being typed is not squeezed behind it; when it goes the
+  sheet returns to the detent it left, unless it was dragged elsewhere meanwhile.
+  The keyboard is read from the safe area — once with the keyboard region, once
+  without — so no field needs marking and moving between fields does not bounce the
+  sheet. A floating or hardware keyboard covers nothing and raises nothing.
+  `expandsForKeyboard` turns it off; the wide layout never does it.
 - The initial detent is simply the value `detent` holds when the controller is
   created; there is no separate `initialDetent`. A value outside `detents` resolves
   to the smallest.
@@ -277,6 +284,8 @@ public final class PanelController {
     public var detent: Detent = .half
     /// The resting heights the panel snaps between.
     public var detents: [Detent] = Detent.defaultSet
+    /// Whether a sheet rises to its largest detent while a keyboard is docked.
+    public var expandsForKeyboard: Bool = true
 
     // Consumer-owned configuration
     public var style: PanelStyle = .default

@@ -77,33 +77,48 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
   /// Measured rather than estimated, once the panel has laid out once.
   @State private var barHeight: CGFloat?
   @State private var toastHeight: CGFloat = 0
+  @State private var keyboardExpansion = KeyboardExpansion()
 
   private var style: PanelStyle { controller.style }
 
   func body(content: Content) -> some View {
-    GeometryReader { proxy in
-      let layout = resolveLayout(in: proxy)
+    // The safe area, read twice: the outer reader sees the keyboard, the inner
+    // one ignores it, so a docked keyboard is the difference between them —
+    // whichever field raised it, inside a list row or not.
+    GeometryReader { keyboardProxy in
+      GeometryReader { proxy in
+        chrome(content, in: proxy,
+               isKeyboardDocked: keyboardProxy.safeAreaInsets.bottom > proxy.safeAreaInsets.bottom)
+      }
+      .ignoresSafeArea(.keyboard)
+    }
+  }
 
-      // One full-container stack that ignores the safe area exactly once. Each
-      // surface is then placed by alignment plus explicit safe-area padding, so
-      // where it lands never depends on how SwiftUI resolves safe areas for
-      // overlays — which is how a sheet ends up under the Dynamic Island.
-      ZStack(alignment: .topLeading) {
-        content
-        place(panelAligned(), in: layout.alignedFrame, opacity: layout.alignedOpacity)
-        place(panelTrailing(), in: layout.trailingFrame)
-        placeToast(layout)
-        placeScrim(layout)
-        placePanel(layout)
-      }
-      .frame(width: layout.container.width, height: layout.container.height)
-      .ignoresSafeArea()
-      .environment(\.panelController, controller)
-      // Reported from outside the view update: writing observable state during
-      // `body` is a runtime warning and a source of layout loops.
-      .onChange(of: layout.geometry, initial: true) { _, geometry in
-        controller.report(geometry)
-      }
+  private func chrome(_ content: Content, in proxy: GeometryProxy, isKeyboardDocked: Bool) -> some View {
+    let layout = resolveLayout(in: proxy)
+
+    // One full-container stack that ignores the safe area exactly once. Each
+    // surface is then placed by alignment plus explicit safe-area padding, so
+    // where it lands never depends on how SwiftUI resolves safe areas for
+    // overlays — which is how a sheet ends up under the Dynamic Island.
+    return ZStack(alignment: .topLeading) {
+      content
+      place(panelAligned(), in: layout.alignedFrame, opacity: layout.alignedOpacity)
+      place(panelTrailing(), in: layout.trailingFrame)
+      placeToast(layout)
+      placeScrim(layout)
+      placePanel(layout)
+    }
+    .frame(width: layout.container.width, height: layout.container.height)
+    .ignoresSafeArea()
+    .environment(\.panelController, controller)
+    // Reported from outside the view update: writing observable state during
+    // `body` is a runtime warning and a source of layout loops.
+    .onChange(of: layout.geometry, initial: true) { _, geometry in
+      controller.report(geometry)
+    }
+    .onChange(of: isKeyboardDocked) { _, docked in
+      keyboardChanged(docked)
     }
   }
 
@@ -329,6 +344,23 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
     .padding(.top, layout.edge.top)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .animation(style.animation, value: controller.isToastVisible)
+  }
+
+  // MARK: - Keyboard
+
+  /// A docked keyboard covers the bottom of a sheet and squeezes its content,
+  /// so the sheet rises to its largest detent while one is up, and goes back
+  /// once it is gone.
+  private func keyboardChanged(_ docked: Bool) {
+    let largest = controller.detents.max { $0.fraction < $1.fraction } ?? .full
+    withAnimation(style.animation) {
+      if docked {
+        guard controller.expandsForKeyboard, controller.layoutMode == .bottomSheet else { return }
+        keyboardExpansion.expand(&controller.detent, to: largest)
+      } else {
+        keyboardExpansion.restore(&controller.detent, from: largest)
+      }
+    }
   }
 
   // MARK: - Gestures

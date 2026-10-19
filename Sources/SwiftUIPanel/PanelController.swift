@@ -31,6 +31,12 @@ public final class PanelController {
   public var detent: Detent = .half
   /// The resting heights the panel snaps between.
   public var detents: [Detent] = Detent.defaultSet
+  /// Whether a sheet rises to its largest detent while a docked keyboard is
+  /// up, and returns to the detent it left once the keyboard goes. A sheet
+  /// dragged elsewhere meanwhile stays where it was dragged. A floating or
+  /// hardware keyboard covers nothing and raises nothing, and the wide layout
+  /// never rises.
+  public var expandsForKeyboard: Bool = true
   /// Every number and material the chrome draws with.
   public var style: PanelStyle = .default
   /// Forces a layout. `nil` resolves it from the container's width.

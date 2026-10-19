@@ -78,6 +78,30 @@ struct PanelHeights: Equatable {
   private var maxHeight: CGFloat { height(of: largest) }
 }
 
+/// What a docked keyboard does to a sheet's detent: raises it while the
+/// keyboard is up, and puts it back after.
+struct KeyboardExpansion: Equatable {
+
+  /// Where the panel rested before the keyboard raised it. `nil` when the
+  /// keyboard found it already at the top, so there is nothing to put back.
+  private(set) var restoring: Detent?
+
+  /// Raises `detent` to `target`, remembering where it was.
+  mutating func expand(_ detent: inout Detent, to target: Detent) {
+    guard detent != target else { return }
+    restoring = detent
+    detent = target
+  }
+
+  /// Puts back the detent the keyboard raised — unless the panel has been dragged
+  /// somewhere else meanwhile, in which case it stays where it was put.
+  mutating func restore(_ detent: inout Detent, from target: Detent) {
+    defer { restoring = nil }
+    guard let restoring, detent == target else { return }
+    detent = restoring
+  }
+}
+
 /// The wide panel's widths — the one dimension it resizes freely.
 struct PanelWidths: Equatable {
 

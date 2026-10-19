@@ -376,3 +376,46 @@ struct PanelRegionsTests {
     #expect(corner.trailing.minX == 16)
   }
 }
+
+@Suite("Keyboard expansion")
+struct KeyboardExpansionTests {
+
+  @Test("The keyboard raises the sheet, and its going puts back the detent it left")
+  func roundTrip() {
+    var expansion = KeyboardExpansion()
+    var detent = Detent.half
+    expansion.expand(&detent, to: .full)
+    #expect(detent == .full)
+    expansion.restore(&detent, from: .full)
+    #expect(detent == .half)
+    #expect(expansion.restoring == nil)
+  }
+
+  @Test("A sheet the keyboard found already at the top stays there")
+  func alreadyExpanded() {
+    var expansion = KeyboardExpansion()
+    var detent = Detent.full
+    expansion.expand(&detent, to: .full)
+    expansion.restore(&detent, from: .full)
+    #expect(detent == .full)
+  }
+
+  @Test("A sheet dragged elsewhere with the keyboard up stays where it was dragged")
+  func draggedWithKeyboardUp() {
+    var expansion = KeyboardExpansion()
+    var detent = Detent.minimized
+    expansion.expand(&detent, to: .full)
+    detent = .half
+    expansion.restore(&detent, from: .full)
+    #expect(detent == .half)
+    #expect(expansion.restoring == nil)
+  }
+
+  @Test("A keyboard that never raised the sheet changes nothing as it goes")
+  func restoreWithoutExpand() {
+    var expansion = KeyboardExpansion()
+    var detent = Detent.full
+    expansion.restore(&detent, from: .full)
+    #expect(detent == .full)
+  }
+}
