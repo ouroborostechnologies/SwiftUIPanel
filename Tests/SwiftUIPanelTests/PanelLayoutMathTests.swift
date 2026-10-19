@@ -287,11 +287,13 @@ struct PanelControllerTests {
     controller.report(ChromeGeometry(layoutMode: .floatingCorner,
                                      contentInsets: EdgeInsets(top: 0, leading: 356, bottom: 0, trailing: 0),
                                      panelFrame: panel, toastFrame: .zero,
-                                     panelAlignedFrame: .zero, panelTrailingFrame: trailing))
+                                     panelAlignedFrame: .zero, panelTrailingFrame: trailing,
+                                     freeSpaceOpacity: 0.25))
     #expect(controller.layoutMode == .floatingCorner)
     #expect(controller.contentInsets.leading == 356)
     #expect(controller.panelFrame == panel)
     #expect(controller.panelTrailingFrame == trailing)
+    #expect(controller.freeSpaceOpacity == 0.25)
   }
 }
 

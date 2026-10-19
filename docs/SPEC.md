@@ -322,6 +322,8 @@ public final class PanelController {
     public internal(set) var panelFrame: CGRect
     public internal(set) var toastFrame: CGRect
     public internal(set) var buttonStackFrame: CGRect
+    /// 1, falling to 0 as a sheet on iOS reaches `.full` (§12.2).
+    public internal(set) var freeSpaceOpacity: Double
 
     public init() {}
 }
@@ -610,6 +612,14 @@ height equivalent.
 Kept, with `PanelStyle.marginDissolveDistance` as its one token. Over the last stretch
 to `.full` the sheet's side and bottom margins collapse and it goes edge-to-edge, its
 corners turning concentric with the display's own curvature as they do.
+
+On iOS the rest of the screen recedes across the same stretch, read from the same
+progress: a scrim rises behind the sheet, and the chrome over the free space —
+both containers, and whatever the consumer opts in through
+`PanelController.freeSpaceOpacity` — fades out, so a sheet at `.full` is not crowned by
+a strip of buttons squeezed into the top inset. Being a function of the live height,
+it tracks a drag both ways. The wide layout never fades anything: a panel at `.full`
+there covers a column, not the screen.
 
 ### 12.3 The toast keeps its margins at `.full`
 

@@ -138,6 +138,10 @@ the panel back down fades it in again. Faded out, it stops taking taps.
 `panelTrailing` sits on the panel's trailing side, and on narrow layouts spans the whole inset
 container.
 
+On iOS, as a bottom sheet closes the last stretch to `.full`, both containers fade out — tracking
+the drag, alongside the margin dissolve and the scrim — and stop taking taps. The same value is
+published as `panel.freeSpaceOpacity`, for chrome of your own drawn over the content.
+
 ### The toast and the buttons
 
 The toast shares the panel's chrome and belongs to the container, not to the panel: it never
@@ -209,6 +213,7 @@ panel.panelFrame              // published: raw frames, for non-SwiftUI inset AP
 panel.toastFrame
 panel.panelAlignedFrame       // published: the two containers' rectangles
 panel.panelTrailingFrame
+panel.freeSpaceOpacity        // published: 1, fading to 0 as a sheet reaches .full on iOS
 ```
 
 ```swift

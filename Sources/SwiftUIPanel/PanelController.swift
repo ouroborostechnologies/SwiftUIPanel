@@ -79,6 +79,21 @@ public final class PanelController {
   public private(set) var panelAlignedFrame: CGRect = .zero
   /// The frame of the container handed to `panelTrailing:`. See `panelFrame`.
   public private(set) var panelTrailingFrame: CGRect = .zero
+  /// How visible chrome over the panel's free space should be: 1, falling to
+  /// 0 as a bottom sheet on iOS closes the last stretch to `.full` — the same
+  /// stretch its margins dissolve and the scrim rises across. Everywhere else
+  /// it stays 1: a wide panel at `.full` leaves the space beside it alone.
+  ///
+  /// It tracks an interactive drag, so chrome fades out as the sheet is
+  /// dragged open and back in as it is dragged down. The package applies it
+  /// to `panelAligned:` and `panelTrailing:`; apply it to anything of your own
+  /// drawn over the content.
+  ///
+  /// ```swift
+  /// Crosshair()
+  ///     .opacity(panel.freeSpaceOpacity)
+  /// ```
+  public private(set) var freeSpaceOpacity: Double = 1
 
   public init() {}
 
@@ -90,6 +105,7 @@ public final class PanelController {
     toastFrame = geometry.toastFrame
     panelAlignedFrame = geometry.panelAlignedFrame
     panelTrailingFrame = geometry.panelTrailingFrame
+    freeSpaceOpacity = geometry.freeSpaceOpacity
   }
 }
 
@@ -102,6 +118,7 @@ struct ChromeGeometry: Equatable {
   var toastFrame: CGRect
   var panelAlignedFrame: CGRect
   var panelTrailingFrame: CGRect
+  var freeSpaceOpacity: Double
 }
 
 private struct PanelControllerKey: EnvironmentKey {

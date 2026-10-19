@@ -41,6 +41,9 @@ public extension View {
   ///     layout that is the strip beside the panel; on a narrow one, where the
   ///     sheet spans the full width, it is the whole inset container and
   ///     floats over the sheet.
+  ///
+  /// On iOS both containers fade out as a bottom sheet reaches `.full`; see
+  /// `PanelController.freeSpaceOpacity`.
   func floatingPanel<Main: View, Bar: View, ToastContent: View, Aligned: View, Trailing: View>(
     _ controller: PanelController,
     @ViewBuilder main: @escaping () -> Main,
@@ -105,8 +108,9 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
     // overlays — which is how a sheet ends up under the Dynamic Island.
     return ZStack(alignment: .topLeading) {
       content
-      place(panelAligned(), in: layout.alignedFrame, opacity: layout.alignedOpacity)
-      place(panelTrailing(), in: layout.trailingFrame)
+      place(panelAligned(), in: layout.alignedFrame,
+            opacity: min(layout.alignedOpacity, layout.freeSpaceOpacity))
+      place(panelTrailing(), in: layout.trailingFrame, opacity: layout.freeSpaceOpacity)
       placeToast(layout)
       placeScrim(layout)
       placePanel(layout)
@@ -166,8 +170,10 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
 
   /// Over its final approach to `.full` the sheet's side and bottom margins
   /// dissolve and it goes edge-to-edge; only the top clearance stays, so a
-  /// sliver of content and the handle remain reachable. A focused sheet keeps
-  /// its margins at any height: it is sized to its content, not opened.
+  /// sliver of content and the handle remain reachable. On iOS the screen
+  /// recedes with it: the scrim rises and the chrome over the free space
+  /// fades. A focused sheet keeps its margins at any height: it is sized to
+  /// its content, not opened.
   private func resolveSheet(_ layout: inout ResolvedLayout) {
     let bottomClearance = layout.margin
     let height = restingHeight(layout)
@@ -191,6 +197,7 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
     guard controller.isPanelVisible else { return }
     #if os(iOS)
     layout.scrimOpacity = style.scrimOpacity * dissolve
+    layout.freeSpaceOpacity = 1 - dissolve
     #endif
     layout.panelFrame = CGRect(origin: CGPoint(x: layout.sheetLeadingInset,
                                                y: layout.container.height - bottomClearance - height),
@@ -454,6 +461,10 @@ private struct ResolvedLayout {
   /// How dark the screen behind the panel is. Zero everywhere but a sheet
   /// near `.full` on iOS.
   var scrimOpacity: Double = 0
+  /// How visible the chrome over the free space is. One everywhere but a
+  /// sheet near `.full` on iOS, where the panel leaves no free space worth
+  /// decorating.
+  var freeSpaceOpacity: Double = 1
 
   var panelFrame: CGRect = .zero
   var toastFrame: CGRect = .zero
@@ -466,6 +477,6 @@ private struct ResolvedLayout {
   var geometry: ChromeGeometry {
     ChromeGeometry(layoutMode: mode, contentInsets: contentInsets, panelFrame: panelFrame,
                    toastFrame: toastFrame, panelAlignedFrame: alignedFrame,
-                   panelTrailingFrame: trailingFrame)
+                   panelTrailingFrame: trailingFrame, freeSpaceOpacity: freeSpaceOpacity)
   }
 }
