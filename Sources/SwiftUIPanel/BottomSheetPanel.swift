@@ -4,19 +4,25 @@ import SwiftUI
 /// dragged from its handle or the top strip of its content.
 ///
 /// It knows nothing about what is in either slot — only that the bar is pinned
-/// to its bottom edge and the main slot fills what is left.
+/// to its bottom edge and the main slot fills what is left. Focused, it is the
+/// main slot alone, at its content's height, with nothing to drag.
 struct BottomSheetPanel<Main: View, Bar: View>: View {
 
   let style: PanelStyle
   let height: CGFloat
   let cornerRadii: RectangleCornerRadii
   /// Padding under the bar slot, keeping its content clear of the home
-  /// indicator the sheet floats over.
+  /// indicator the sheet floats over. Under the main slot when focused.
   let barBottomInset: CGFloat
+  let isFocused: Bool
+  /// The tallest the sheet may fit itself to when focused.
+  let maxHeight: CGFloat
   @ViewBuilder let main: Main
   @ViewBuilder let bar: Bar
   /// Reports the height of `.minimized`: the handle, the bar, and the inset.
   let onBarHeightChange: (CGFloat) -> Void
+  /// Reports, while focused, the height the main slot's content asks for.
+  let onFittedHeightChange: (CGFloat) -> Void
   let onDragChanged: (CGFloat) -> Void
   let onDragEnded: (_ projectedTranslation: CGFloat) -> Void
 
@@ -25,19 +31,23 @@ struct BottomSheetPanel<Main: View, Bar: View>: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      handle
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { handleHeight = $0 }
-      VStack(spacing: 0) {
-        // A zero minimum lets the slot collapse below its content's own, and
-        // clipping stops a shrinking sheet showing a sliver spilling past the bar.
-        main
-          .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-          .clipped()
-        bar
-          .padding(.bottom, barBottomInset)
-          .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { barHeight = $0 }
+      if !isFocused {
+        handle
+          .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { handleHeight = $0 }
       }
-      .overlay(alignment: .top) { contentDragStrip }
+      VStack(spacing: 0) {
+        MainSlot(fittingHeight: isFocused ? max(maxHeight - barBottomInset, 0) : nil) { main }
+          .padding(.bottom, isFocused ? barBottomInset : 0)
+          .background { if isFocused { FittedHeightProbe(onChange: onFittedHeightChange) } }
+        if !isFocused {
+          bar
+            .padding(.bottom, barBottomInset)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { barHeight = $0 }
+        }
+      }
+      .overlay(alignment: .top) {
+        if !isFocused { contentDragStrip }
+      }
     }
     .frame(maxWidth: .infinity)
     .frame(height: max(height, 0), alignment: .top)

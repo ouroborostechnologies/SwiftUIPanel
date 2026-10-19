@@ -168,7 +168,29 @@ saved, and it keeps the number of resting heights the consumer's decision (§1.3
   views and unit-tested. Snapping is the part that decides whether the panel feels
   right; it is tested rather than eyeballed.
 
-### 3.5 Visibility
+### 3.5 Focus
+
+`isFocused` on the controller gives the panel over to its main slot, for a task
+whose controls are all it should show — drawing on the content behind it.
+
+- **The bar slot and the resize handle go.** The sheet's handle and content drag
+  strip, and the wide panel's bottom and corner grips, are removed; the wide
+  panel's trailing grip stays, since width is not what focus decides.
+- **The height is the content's, not a detent's.** No snapping, capped by the
+  available height, and following the content as it grows and shrinks with the
+  style's animation. A focused sheet keeps its margins at any height — it is
+  sized, not opened — so it never dissolves or dims the screen.
+- **Scrolling content is read, not asked.** A `List`, `Form`, or `ScrollView`
+  takes whatever height it is offered, so the slot reads the content size of the
+  first scroll view inside it and uses the ideal height of anything else. The
+  content size alone, not the scroll view's insets: those include whatever safe
+  area it overlaps, which a springing sheet changes every frame — a fit that
+  counted them would never settle. Past the cap, a scroll view scrolls and
+  anything else is clipped.
+- **`detent` is untouched**, so clearing focus returns the panel to where it
+  rested. The consumer's main-slot content keeps its identity across the change.
+
+### 3.6 Visibility
 
 `isPanelVisible` on the controller. Toggling it slides the panel off the container
 edge it is anchored to — downwards on narrow, leading on wide — and back. A slide,
@@ -286,6 +308,8 @@ public final class PanelController {
     public var detents: [Detent] = Detent.defaultSet
     /// Whether a sheet rises to its largest detent while a keyboard is docked.
     public var expandsForKeyboard: Bool = true
+    /// The main slot alone, at its content's height (§3.5).
+    public var isFocused: Bool = false
 
     // Consumer-owned configuration
     public var style: PanelStyle = .default
@@ -516,6 +540,7 @@ Sources/SwiftUIPanel/
   FloatingPanelModifier.swift  // public entry point; one GeometryReader, one pass
   BottomSheetPanel.swift       // narrow layout + drag
   FloatingCornerPanel.swift    // wide layout + resize
+  MainSlot.swift               // fills the panel, or fits its content when focused
   Toast.swift
   ButtonStack.swift            // + PanelButtonStyle, PanelVisibilityToggle
   PanelSurface.swift           // shared material/radius/shadow treatment

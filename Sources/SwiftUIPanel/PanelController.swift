@@ -37,6 +37,17 @@ public final class PanelController {
   /// hardware keyboard covers nothing and raises nothing, and the wide layout
   /// never rises.
   public var expandsForKeyboard: Bool = true
+  /// Gives the panel over to its main slot, for a task whose controls are
+  /// all the panel should show — drawing on the content behind it, say.
+  ///
+  /// The bar slot and the resize handle go, and the panel takes the height
+  /// its main slot's content asks for instead of a detent: capped by the room
+  /// available, following the content as it grows and shrinks, and never
+  /// snapping. The wide panel's width stays resizable.
+  ///
+  /// `detent` is left alone, so clearing this puts the panel back where it
+  /// rested. Animate the change as you would a detent's.
+  public var isFocused: Bool = false
   /// Every number and material the chrome draws with.
   public var style: PanelStyle = .default
   /// Forces a layout. `nil` resolves it from the container's width.

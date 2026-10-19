@@ -76,6 +76,8 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
   @State private var resizeStart: CGSize?
   /// Measured rather than estimated, once the panel has laid out once.
   @State private var barHeight: CGFloat?
+  /// What a focused panel's content asks for, measured by the panel itself.
+  @State private var fittedHeight: CGFloat?
   @State private var toastHeight: CGFloat = 0
   @State private var keyboardExpansion = KeyboardExpansion()
 
@@ -164,12 +166,12 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
 
   /// Over its final approach to `.full` the sheet's side and bottom margins
   /// dissolve and it goes edge-to-edge; only the top clearance stays, so a
-  /// sliver of content and the handle remain reachable.
+  /// sliver of content and the handle remain reachable. A focused sheet keeps
+  /// its margins at any height: it is sized to its content, not opened.
   private func resolveSheet(_ layout: inout ResolvedLayout) {
     let bottomClearance = layout.margin
-    let resting = layout.heights.resolved(controller.detent)
-    let height = layout.heights.height(from: resting, draggedBy: heightDrag)
-    let dissolve = layout.heights.dissolveProgress(atHeight: height)
+    let height = restingHeight(layout)
+    let dissolve = controller.isFocused ? 0 : layout.heights.dissolveProgress(atHeight: height)
 
     layout.sheetLeadingInset = layout.edge.leading * (1 - dissolve)
     layout.sheetTrailingInset = layout.edge.trailing * (1 - dissolve)
@@ -196,9 +198,8 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
   }
 
   private func resolveCornerPanel(_ layout: inout ResolvedLayout) {
-    let resting = layout.heights.resolved(controller.detent)
     layout.panelSize = CGSize(width: layout.widths.clamped(panelWidth ?? style.panelWidth),
-                              height: layout.heights.height(from: resting, draggedBy: heightDrag))
+                              height: restingHeight(layout))
     layout.panelCornerRadii = style.panelCornerRadii(
       ContainerCornerRadius.concentric(inset: layout.margin, fallback: style.cornerRadius),
       mode: layout.mode)
@@ -206,6 +207,14 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
     guard controller.isPanelVisible else { return }
     layout.panelFrame = CGRect(origin: CGPoint(x: layout.edge.leading, y: layout.edge.top),
                                size: layout.panelSize)
+  }
+
+  /// The panel's height on either layout: its content's when focused, else
+  /// its detent's, following any drag in progress.
+  private func restingHeight(_ layout: ResolvedLayout) -> CGFloat {
+    let resting = layout.heights.resolved(controller.detent)
+    guard !controller.isFocused else { return layout.heights.fittedHeight(fittedHeight, resting: resting) }
+    return layout.heights.height(from: resting, draggedBy: heightDrag)
   }
 
   /// The toast belongs to the container on both layouts: the panel's width on
@@ -304,9 +313,12 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
                        height: layout.panelSize.height,
                        cornerRadii: layout.panelCornerRadii,
                        barBottomInset: layout.barBottomInset,
+                       isFocused: controller.isFocused,
+                       maxHeight: layout.heights.availableHeight,
                        main: { main() },
                        bar: { bar() },
                        onBarHeightChange: { barHeight = $0 },
+                       onFittedHeightChange: fitted,
                        onDragChanged: { heightDrag = $0 },
                        onDragEnded: { settleHeight(layout, projecting: $0) })
         .padding(.leading, layout.sheetLeadingInset)
@@ -319,8 +331,11 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
       FloatingCornerPanel(style: style,
                           size: layout.panelSize,
                           cornerRadii: layout.panelCornerRadii,
+                          isFocused: controller.isFocused,
+                          maxHeight: layout.heights.availableHeight,
                           main: { main() },
                           bar: { bar() },
+                          onFittedHeightChange: fitted,
                           onResize: { edge, translation, projected in
                             resize(layout, edge: edge, translation: translation, projecting: projected)
                           })
@@ -361,6 +376,14 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
         keyboardExpansion.restore(&controller.detent, from: largest)
       }
     }
+  }
+
+  // MARK: - Fitting
+
+  /// A focused panel follows its content as it grows and shrinks — a section
+  /// expanding, a row arriving — with the same motion a detent change gets.
+  private func fitted(_ height: CGFloat) {
+    withAnimation(style.animation) { fittedHeight = height }
   }
 
   // MARK: - Gestures

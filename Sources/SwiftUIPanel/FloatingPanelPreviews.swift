@@ -36,8 +36,8 @@ private struct PanelPreview: View {
       } toast: {
         HStack(spacing: 16) {
           Text("Draw Polygon").font(.headline)
-          Button { controller.isToastVisible = false } label: { Image(systemName: "checkmark") }
-          Button { controller.isToastVisible = false } label: { Image(systemName: "xmark") }
+          Button { drawing(false) } label: { Image(systemName: "checkmark") }
+          Button { drawing(false) } label: { Image(systemName: "xmark") }
         }
         .buttonStyle(.plain)
       } panelAligned: {
@@ -51,13 +51,22 @@ private struct PanelPreview: View {
       } panelTrailing: {
         PanelButtonStack {
           PanelVisibilityToggle()
-          Button { controller.isToastVisible.toggle() } label: { Image(systemName: "pencil.tip") }
+          Button { drawing(!controller.isFocused) } label: { Image(systemName: "pencil.tip") }
           Button {} label: { Image(systemName: "plus") }
             .buttonStyle(PanelButtonStyle(prominent: true))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
       }
       .onAppear { controller.layoutModeOverride = override }
+  }
+
+  /// A task that takes the panel over: the toast names it, and the panel
+  /// shrinks to its content with the tabs and the handle gone.
+  private func drawing(_ isDrawing: Bool) {
+    withAnimation(controller.style.animation) {
+      controller.isToastVisible = isDrawing
+      controller.isFocused = isDrawing
+    }
   }
 }
 

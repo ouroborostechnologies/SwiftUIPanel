@@ -81,6 +81,25 @@ struct PanelHeightsTests {
     #expect(capped.dissolveProgress(atHeight: 400) == 0)
     #expect(capped.dissolveProgress(atHeight: 800) == 0)
   }
+
+  @Test("A focused panel takes its content's height, between no detents")
+  func fitted() {
+    // Neither a detent height nor the bar floor: the bar slot is not shown.
+    #expect(layout.fittedHeight(180, resting: .half) == 180)
+    #expect(layout.fittedHeight(40, resting: .half) == 40)
+  }
+
+  @Test("A focused panel never outgrows the available height")
+  func fittedCap() {
+    #expect(layout.fittedHeight(1200, resting: .half) == 800)
+    #expect(layout.fittedHeight(-10, resting: .half) == 0)
+  }
+
+  @Test("Until its content is measured, a focused panel rests at its detent")
+  func fittedBeforeMeasurement() {
+    #expect(layout.fittedHeight(nil, resting: .half) == 400)
+    #expect(layout.fittedHeight(nil, resting: .minimized) == 64)
+  }
 }
 
 @Suite("Panel widths")

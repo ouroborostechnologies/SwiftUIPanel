@@ -64,6 +64,15 @@ struct PanelHeights: Equatable {
     return detents.min { abs(height(of: $0) - stop) < abs(height(of: $1) - stop) } ?? resting
   }
 
+  /// A focused panel's height: what its content asks for, up to all of the
+  /// available height, with no detent in it. Until the content has been
+  /// measured, the resting detent's — so the panel moves once, to the right
+  /// height, rather than collapsing first.
+  func fittedHeight(_ content: CGFloat?, resting: Detent) -> CGFloat {
+    guard let content else { return height(of: resting) }
+    return min(max(content, 0), availableHeight)
+  }
+
   /// How far a sheet is into going edge-to-edge: 0 through most of its travel,
   /// rising to 1 over the last `marginDissolveDistance` before the top detent.
   ///

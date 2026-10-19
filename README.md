@@ -88,6 +88,31 @@ display's own curvature.
 `PanelController.detents` — two, or four — and the drag, the snapping, and the wide panel's
 vertical resize all read them.
 
+### Focus
+
+`PanelController.isFocused` gives the panel over to its main slot, for a task whose controls are
+all it should show — drawing on the map behind it, say. The bar slot and the resize handle go, and
+the panel takes the height its content asks for instead of a detent: no snapping, capped by the
+available height, and following the content as it grows and shrinks. Everything else is left to
+the content underneath.
+
+```
+  .half          focused
+┌────────────┐  ┌────────────┐
+│            │  │            │
+│ ┌────────┐ │  │            │
+│ │  main  │ │  │            │
+│ ├────────┤ │  │ ┌────────┐ │
+│ │  bar   │ │  │ │  main  │ │
+│ └────────┘ │  │ └────────┘ │
+└────────────┘  └────────────┘
+```
+
+Content that scrolls has no height of its own, so the panel reads the content height of the first
+`List`, `Form`, or `ScrollView` in the main slot, and the ideal height of anything else. The wide
+panel's width stays resizable, and `detent` is untouched, so clearing focus puts the panel back
+where it rested.
+
 ### The containers
 
 `panelAligned:` and `panelTrailing:` are containers, not slots. Each is handed a rectangle of the
@@ -174,6 +199,7 @@ panel.isPanelVisible          // slides the panel off its anchored edge and back
 panel.isToastVisible          // presence is yours; placement is the package's
 panel.detent                  // the panel's resting height; its value at init is the initial one
 panel.detents                 // the heights it snaps between — two, three, or four
+panel.isFocused               // main slot only, at its content's height — no bar, no handle
 panel.style                   // every number and material, in one place, at runtime
 panel.layoutModeOverride      // forces a layout; nil resolves from the width
 
@@ -206,6 +232,7 @@ Sources/SwiftUIPanel/
   FloatingPanelModifier.swift  // public entry point; one GeometryReader, one pass
   BottomSheetPanel.swift       // narrow layout + drag
   FloatingCornerPanel.swift    // wide layout + resize
+  MainSlot.swift               // fills the panel, or fits its content when focused
   Toast.swift
   PanelButtonStack.swift       // + PanelButtonStyle, PanelVisibilityToggle
   PanelSurface.swift           // shared material/radius/shadow treatment

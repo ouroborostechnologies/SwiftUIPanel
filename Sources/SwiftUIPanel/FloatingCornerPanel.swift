@@ -4,29 +4,40 @@ import SwiftUI
 /// edge, its bottom edge, or the corner between them.
 ///
 /// The grips draw nothing — the pointer changing is the affordance — and are
-/// only as thick as a comfortable target.
+/// only as thick as a comfortable target. Focused, it is the main slot alone,
+/// at its content's height, and only its width can be dragged.
 struct FloatingCornerPanel<Main: View, Bar: View>: View {
 
   let style: PanelStyle
   let size: CGSize
   let cornerRadii: RectangleCornerRadii
+  let isFocused: Bool
+  /// The tallest the panel may fit itself to when focused.
+  let maxHeight: CGFloat
   @ViewBuilder let main: Main
   @ViewBuilder let bar: Bar
+  /// Reports, while focused, the height the main slot's content asks for.
+  let onFittedHeightChange: (CGFloat) -> Void
   /// `projectedTranslation` is non-nil only on the drag that ends the resize.
   let onResize: (ResizeEdge, _ translation: CGSize, _ projectedTranslation: CGSize?) -> Void
 
   var body: some View {
     VStack(spacing: 0) {
-      main
-        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-        .clipped()
-      bar
+      MainSlot(fittingHeight: isFocused ? maxHeight : nil) { main }
+        .background { if isFocused { FittedHeightProbe(onChange: onFittedHeightChange) } }
+      if !isFocused {
+        bar
+      }
     }
-    .frame(width: size.width, height: size.height)
+    .frame(width: size.width, height: size.height, alignment: .top)
     .panelSurface(style, cornerRadii: cornerRadii)
     .overlay(alignment: .trailing) { grip(.trailing) }
-    .overlay(alignment: .bottom) { grip(.bottom) }
-    .overlay(alignment: .bottomTrailing) { grip(.bottomTrailing) }
+    .overlay(alignment: .bottom) {
+      if !isFocused { grip(.bottom) }
+    }
+    .overlay(alignment: .bottomTrailing) {
+      if !isFocused { grip(.bottomTrailing) }
+    }
     .keyboardFocusSection()
   }
 
