@@ -440,3 +440,34 @@ struct KeyboardExpansionTests {
     #expect(detent == .full)
   }
 }
+
+@Suite("Tab bar layout")
+struct TabBarLayoutTests {
+
+  @Test("Equal columns while the widest tab fits one")
+  func equalColumns() {
+    #expect(TabBarLayout.columnWidths(for: [40, 70, 50, 60], filling: 400) == [100, 100, 100, 100])
+  }
+
+  @Test("A tab wider than its share keeps its width; the rest share what is left")
+  func widerTabsKeepTheirWidth() {
+    // A share of 60 is too narrow for the 70; the 170 left over the other three is too
+    // narrow for the 60; the last two split the remaining 110.
+    #expect(TabBarLayout.columnWidths(for: [40, 70, 50, 60], filling: 240) == [55, 70, 55, 60])
+  }
+
+  @Test("At exactly the tabs' own widths, every tab gets its own width")
+  func naturalWidths() {
+    #expect(TabBarLayout.columnWidths(for: [40, 70, 50, 60], filling: 220) == [40, 70, 50, 60])
+  }
+
+  @Test("Never narrower than a tab asks for")
+  func neverSqueezes() {
+    #expect(TabBarLayout.columnWidths(for: [40, 70, 50, 60], filling: 100) == [40, 70, 50, 60])
+  }
+
+  @Test("No tabs, no columns")
+  func empty() {
+    #expect(TabBarLayout.columnWidths(for: [], filling: 300).isEmpty)
+  }
+}

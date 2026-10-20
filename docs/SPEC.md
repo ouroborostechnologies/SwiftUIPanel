@@ -528,6 +528,15 @@ ignorant of what its bar contains, and the layer that *does* know adds the
 behaviour. A consumer building their own bar can do the same by writing to
 `controller.detent`.
 
+### 9.4 Narrow bars
+
+The bar never squeezes a label. Its tabs sit in equal columns while the widest label
+fits one; narrower than that, a tab wider than its share keeps its own width and the
+rest share what is left, so the space between labels gives way first, continuously.
+Below the labels' own widths plus `PanelStyle.tabMinimumSpacing` between each, the bar
+shows icons alone — chosen by `ViewThatFits`, so nothing is measured but the tabs'
+ideal sizes — and every tab keeps its title as its accessibility label.
+
 ---
 
 ## 10. Package structure
