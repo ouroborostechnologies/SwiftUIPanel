@@ -139,7 +139,8 @@ the panel back down fades it in again. Faded out, it stops taking taps.
 container.
 
 On iOS, as a bottom sheet closes the last stretch to `.full`, both containers fade out — tracking
-the drag, alongside the margin dissolve and the scrim — and stop taking taps. The same value is
+the drag, alongside the scrim — and stop taking taps. By default that stretch is the margin
+dissolve's; `style.recedeStartFraction` starts it earlier, as a fraction of the height at `.full`. The same value is
 published as `panel.freeSpaceOpacity`, for chrome of your own drawn over the content.
 
 ### The toast and the buttons

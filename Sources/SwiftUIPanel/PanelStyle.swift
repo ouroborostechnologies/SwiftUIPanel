@@ -91,6 +91,12 @@ public struct PanelStyle: Sendable {
   /// The band below `.full` across which a bottom sheet's margins dissolve
   /// into an edge-to-edge surface.
   public var marginDissolveDistance: CGFloat = 64
+  /// Where, as a fraction of a bottom sheet's height at `.full`, the scrim
+  /// starts to rise and the chrome over the free space starts to fade, on
+  /// iOS. Both arrive at `.full` either way; `1` starts them with the margin
+  /// dissolve, and anything lower starts them earlier in the drag. They never
+  /// start later than the dissolve.
+  public var recedeStartFraction: CGFloat = 1
   /// The last band of its own height across which the `panelAligned:`
   /// container fades, as the panel grows into the column they share. Zero
   /// switches it out the moment it has no room left, with no fade.

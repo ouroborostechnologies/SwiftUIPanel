@@ -75,6 +75,24 @@ struct PanelHeightsTests {
     #expect(layout.dissolveProgress(atHeight: 820) == 1)
   }
 
+  @Test("The screen recedes with the dissolve, or from an earlier start")
+  func recede() {
+    // By default the scrim and the fade ride the margin dissolve.
+    for height in [400.0, 760, 800] {
+      #expect(layout.recedeProgress(atHeight: height) == layout.dissolveProgress(atHeight: height))
+    }
+    var early = PanelStyle()
+    early.recedeStartFraction = 0.75
+    let sooner = PanelHeights(availableHeight: 800, detents: Detent.defaultSet, barHeight: 64, style: early)
+    #expect(sooner.recedeProgress(atHeight: 600) == 0)
+    #expect(abs(sooner.recedeProgress(atHeight: 700) - 0.5) < 1e-9)
+    #expect(sooner.recedeProgress(atHeight: 800) == 1)
+    // Never behind the dissolve, and nothing without a .full to reach.
+    #expect(sooner.recedeProgress(atHeight: 790) >= sooner.dissolveProgress(atHeight: 790))
+    let capped = PanelHeights(availableHeight: 800, detents: [.minimized, .half], barHeight: 64, style: early)
+    #expect(capped.recedeProgress(atHeight: 400) == 0)
+  }
+
   @Test("A detent set capped short of .full keeps its margins")
   func noCollapseWithoutFull() {
     let capped = PanelHeights(availableHeight: 800, detents: [.minimized, .half], barHeight: 64, style: style)

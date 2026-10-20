@@ -622,8 +622,8 @@ Kept, with `PanelStyle.marginDissolveDistance` as its one token. Over the last s
 to `.full` the sheet's side and bottom margins collapse and it goes edge-to-edge, its
 corners turning concentric with the display's own curvature as they do.
 
-On iOS the rest of the screen recedes across the same stretch, read from the same
-progress: a scrim rises behind the sheet, and the chrome over the free space —
+On iOS the rest of the screen recedes across the same stretch — or a longer one, from
+`PanelStyle.recedeStartFraction` of the height at `.full`, never a shorter one: a scrim rises behind the sheet, and the chrome over the free space —
 both containers, and whatever the consumer opts in through
 `PanelController.freeSpaceOpacity` — fades out, so a sheet at `.full` is not crowned by
 a strip of buttons squeezed into the top inset. Being a function of the live height,

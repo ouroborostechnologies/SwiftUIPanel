@@ -16,6 +16,7 @@ struct PanelHeights: Equatable {
   let barHeight: CGFloat
   private let rubberBandFactor: CGFloat
   private let dissolveDistance: CGFloat
+  private let recedeStartFraction: CGFloat
 
   init(availableHeight: CGFloat, detents: [Detent], barHeight: CGFloat, style: PanelStyle) {
     self.availableHeight = max(availableHeight, 0)
@@ -24,6 +25,7 @@ struct PanelHeights: Equatable {
     self.barHeight = max(barHeight, 0)
     self.rubberBandFactor = style.rubberBandFactor
     self.dissolveDistance = style.marginDissolveDistance
+    self.recedeStartFraction = style.recedeStartFraction
   }
 
   var smallest: Detent { detents[0] }
@@ -81,6 +83,17 @@ struct PanelHeights: Equatable {
   func dissolveProgress(atHeight height: CGFloat) -> CGFloat {
     guard largest.fraction >= 1, maxHeight > dissolveDistance else { return 0 }
     return min(max(1 - (maxHeight - height) / dissolveDistance, 0), 1)
+  }
+
+  /// How far the screen behind a sheet has receded — the scrim risen, the
+  /// free-space chrome faded: 0 below `recedeStartFraction` of the top
+  /// detent's height, rising to 1 at it. Never behind the margin dissolve, so
+  /// a start fraction of 1 is the dissolve itself.
+  func recedeProgress(atHeight height: CGFloat) -> CGFloat {
+    let dissolve = dissolveProgress(atHeight: height)
+    guard largest.fraction >= 1, recedeStartFraction < 1, maxHeight > 0 else { return dissolve }
+    let start = maxHeight * max(recedeStartFraction, 0)
+    return max(min(max((height - start) / (maxHeight - start), 0), 1), dissolve)
   }
 
   private var minHeight: CGFloat { height(of: smallest) }

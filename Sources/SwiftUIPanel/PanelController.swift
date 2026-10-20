@@ -80,8 +80,9 @@ public final class PanelController {
   /// The frame of the container handed to `panelTrailing:`. See `panelFrame`.
   public private(set) var panelTrailingFrame: CGRect = .zero
   /// How visible chrome over the panel's free space should be: 1, falling to
-  /// 0 as a bottom sheet on iOS closes the last stretch to `.full` — the same
-  /// stretch its margins dissolve and the scrim rises across. Everywhere else
+  /// 0 as a bottom sheet on iOS closes the last stretch to `.full` — the
+  /// stretch the scrim rises across, from `PanelStyle.recedeStartFraction` of
+  /// the way up or, by default, with the margin dissolve. Everywhere else
   /// it stays 1: a wide panel at `.full` leaves the space beside it alone.
   ///
   /// It tracks an interactive drag, so chrome fades out as the sheet is

@@ -171,8 +171,9 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
   /// Over its final approach to `.full` the sheet's side and bottom margins
   /// dissolve and it goes edge-to-edge; only the top clearance stays, so a
   /// sliver of content and the handle remain reachable. On iOS the screen
-  /// recedes with it: the scrim rises and the chrome over the free space
-  /// fades. A focused sheet keeps its margins at any height: it is sized to
+  /// recedes with it — from `recedeStartFraction` of the way up, so possibly
+  /// sooner: the scrim rises and the chrome over the free space fades. A
+  /// focused sheet keeps its margins at any height: it is sized to
   /// its content, not opened.
   private func resolveSheet(_ layout: inout ResolvedLayout) {
     let bottomClearance = layout.margin
@@ -196,8 +197,9 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
 
     guard controller.isPanelVisible else { return }
     #if os(iOS)
-    layout.scrimOpacity = style.scrimOpacity * dissolve
-    layout.freeSpaceOpacity = 1 - dissolve
+    let recede = controller.isFocused ? 0 : layout.heights.recedeProgress(atHeight: height)
+    layout.scrimOpacity = style.scrimOpacity * recede
+    layout.freeSpaceOpacity = 1 - recede
     #endif
     layout.panelFrame = CGRect(origin: CGPoint(x: layout.sheetLeadingInset,
                                                y: layout.container.height - bottomClearance - height),
