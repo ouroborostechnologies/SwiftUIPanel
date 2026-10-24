@@ -51,11 +51,14 @@ public struct PanelButtonStack<Content: View>: View {
 ///     .buttonStyle(PanelButtonStyle(prominent: true))
 /// ```
 ///
+/// A plain button draws its glyph in the primary label colour, the way the
+/// system's own glass buttons do; a prominent one is filled and draws it white.
 /// Glass carries its own shadow and its own pressed response, so the style
 /// adds neither.
 public struct PanelButtonStyle: ButtonStyle {
 
   private let isProminent: Bool
+  private let tint: Color?
 
   /// Grows the buttons with the user's type size rather than pinning them to
   /// points.
@@ -64,20 +67,23 @@ public struct PanelButtonStyle: ButtonStyle {
   /// See `PanelSurface`: read outside the glass so `.system` can re-assert it.
   @Environment(\.colorScheme) private var environmentScheme
 
-  /// - Parameter prominent: tints the glass with the accent colour, for the
-  ///   one primary action of a screen.
-  public init(prominent: Bool = false) {
+  /// - Parameters:
+  ///   - prominent: fills the glass with the accent colour, for the one primary
+  ///     action of a screen, or for a mode while it is on.
+  ///   - tint: the fill of a prominent button, in place of the accent colour.
+  public init(prominent: Bool = false, tint: Color? = nil) {
     self.isProminent = prominent
+    self.tint = tint
   }
 
   public func makeBody(configuration: Configuration) -> some View {
     let style = controller?.style ?? .default
     let diameter = style.buttonDiameter * typeScale
-    let glass = isProminent ? style.buttonGlass.tint(.accentColor) : style.buttonGlass
+    let glass = isProminent ? style.buttonGlass.tint(tint ?? .accentColor) : style.buttonGlass
     configuration.label
       .font(.body.weight(.medium))
       .imageScale(.medium)
-      .foregroundStyle(isProminent ? AnyShapeStyle(.white) : AnyShapeStyle(Color.accentColor))
+      .foregroundStyle(isProminent ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
       .frame(width: diameter, height: diameter)
       .glassEffect(glass.interactive(), in: .circle)
       .panelColorScheme(style.glassScheme, environment: environmentScheme)

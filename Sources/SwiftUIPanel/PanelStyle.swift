@@ -113,9 +113,9 @@ public struct PanelStyle: Sendable {
   public var tabIconHeight: CGFloat = 22
   /// Between a tab's icon and its label.
   public var tabLabelSpacing: CGFloat = 3
-  /// The least room between two tabs' labels. A bar too narrow to keep it
-  /// shows icons alone rather than squeezing a label.
-  public var tabMinimumSpacing: CGFloat = 8
+  /// Between the bar's edges and its first and last tabs. The tabs share the
+  /// width inside it evenly.
+  public var tabBarPaddingHorizontal: CGFloat = 20
   public var tabBarPaddingTop: CGFloat = 6
   public var tabBarPaddingBottom: CGFloat = 4
 

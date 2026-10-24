@@ -528,14 +528,13 @@ ignorant of what its bar contains, and the layer that *does* know adds the
 behaviour. A consumer building their own bar can do the same by writing to
 `controller.detent`.
 
-### 9.4 Narrow bars
+### 9.4 Spacing
 
-The bar never squeezes a label. Its tabs sit in equal columns while the widest label
-fits one; narrower than that, a tab wider than its share keeps its own width and the
-rest share what is left, so the space between labels gives way first, continuously.
-Below the labels' own widths plus `PanelStyle.tabMinimumSpacing` between each, the bar
-shows icons alone — chosen by `ViewThatFits`, so nothing is measured but the tabs'
-ideal sizes — and every tab keeps its title as its accessibility label.
+The tabs share the bar's width evenly, inside `PanelStyle.tabBarPaddingHorizontal` at
+either end: an `HStack` of equal, flexible columns, so the space between tabs follows
+the width of the panel and nothing is measured. A column narrower than its label
+shrinks the label slightly, then truncates it; every tab keeps its title as its
+accessibility label.
 
 ---
 
@@ -647,10 +646,13 @@ piece of coordination this revision set out to remove.
   takes `toastFrame.maxY + surfaceSpacing` as its top whenever the toast reaches its
   column — always on narrow, never on wide, where the toast's strip already keeps
   clear of it. One rule, no layout branch.
-- **`PanelButtonStyle(prominent:)`.** §5 shows the style with its members elided. It
-  takes one: `prominent` fills the circle with the accent colour, for the single
-  primary action of a screen. Without it a consumer wanting an accented button has to
-  re-implement the whole circular treatment to change its fill.
+- **`PanelButtonStyle(prominent:tint:)`.** §5 shows the style with its members elided.
+  `prominent` fills the circle with the accent colour and draws the glyph white, for
+  the single primary action of a screen or a mode that is on; `tint` replaces the
+  accent for a prominent button that must read as different from it. Without them a
+  consumer wanting a filled button has to re-implement the whole circular treatment to
+  change its fill. A plain button draws its glyph in the primary label colour, as the
+  system's own glass buttons do, so the stack reads as system chrome beside the panel.
 - **`ContainerCornerRadius` holds the only literals outside `PanelStyle`**: the
   macOS window radius per major release, since AppKit exposes no API for it. They are
   measurements of the system's own window shape rather than design values — the
