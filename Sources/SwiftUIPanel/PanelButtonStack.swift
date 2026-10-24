@@ -52,7 +52,9 @@ public struct PanelButtonStack<Content: View>: View {
 /// ```
 ///
 /// A plain button draws its glyph in the primary label colour, the way the
-/// system's own glass buttons do; a prominent one is filled and draws it white.
+/// system's own glass buttons do, and holds the style's appearance over any
+/// backdrop (see `panelControlGlass(_:in:)`); a prominent one is filled and
+/// draws it white.
 /// Glass carries its own shadow and its own pressed response, so the style
 /// adds neither.
 public struct PanelButtonStyle: ButtonStyle {
@@ -79,15 +81,23 @@ public struct PanelButtonStyle: ButtonStyle {
   public func makeBody(configuration: Configuration) -> some View {
     let style = controller?.style ?? .default
     let diameter = style.buttonDiameter * typeScale
-    let glass = isProminent ? style.buttonGlass.tint(tint ?? .accentColor) : style.buttonGlass
-    configuration.label
+    let label = configuration.label
       .font(.body.weight(.medium))
       .imageScale(.medium)
-      .foregroundStyle(isProminent ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
       .frame(width: diameter, height: diameter)
-      .glassEffect(glass.interactive(), in: .circle)
-      .panelColorScheme(style.glassScheme, environment: environmentScheme)
-      .contentShape(Circle())
+    Group {
+      if isProminent {
+        // A tinted glass keeps its colour over any backdrop; only the plain
+        // ones need pinning.
+        label
+          .foregroundStyle(.white)
+          .glassEffect(style.buttonGlass.tint(tint ?? .accentColor).interactive(), in: .circle)
+          .panelColorScheme(style.glassScheme, environment: environmentScheme)
+      } else {
+        label.panelControlGlass(style, in: .circle)
+      }
+    }
+    .contentShape(Circle())
   }
 }
 
