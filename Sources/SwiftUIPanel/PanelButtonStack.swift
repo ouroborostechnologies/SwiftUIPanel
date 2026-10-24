@@ -51,10 +51,8 @@ public struct PanelButtonStack<Content: View>: View {
 ///     .buttonStyle(PanelButtonStyle(prominent: true))
 /// ```
 ///
-/// A plain button draws its glyph in the primary label colour, the way the
-/// system's own glass buttons do, and holds the style's appearance over any
-/// backdrop (see `panelControlGlass(_:in:)`); a prominent one is filled and
-/// draws it white.
+/// A plain button draws its glyph in the label colour of the style's
+/// `glassScheme`; a prominent one is filled and draws it white.
 /// Glass carries its own shadow and its own pressed response, so the style
 /// adds neither.
 public struct PanelButtonStyle: ButtonStyle {
@@ -81,23 +79,26 @@ public struct PanelButtonStyle: ButtonStyle {
   public func makeBody(configuration: Configuration) -> some View {
     let style = controller?.style ?? .default
     let diameter = style.buttonDiameter * typeScale
-    let label = configuration.label
+    let glass = isProminent ? style.buttonGlass.tint(tint ?? .accentColor) : style.buttonGlass
+    configuration.label
       .font(.body.weight(.medium))
       .imageScale(.medium)
+      .foregroundStyle(isProminent ? AnyShapeStyle(.white) : glyphStyle(style))
       .frame(width: diameter, height: diameter)
-    Group {
-      if isProminent {
-        // A tinted glass keeps its colour over any backdrop; only the plain
-        // ones need pinning.
-        label
-          .foregroundStyle(.white)
-          .glassEffect(style.buttonGlass.tint(tint ?? .accentColor).interactive(), in: .circle)
-          .panelColorScheme(style.glassScheme, environment: environmentScheme)
-      } else {
-        label.panelControlGlass(style, in: .circle)
-      }
+      .glassEffect(glass.interactive(), in: .circle)
+      .panelColorScheme(style.glassScheme, environment: environmentScheme)
+      .contentShape(Circle())
+  }
+
+  /// A plain button's glyph colour. Glass recolours `.primary` to suit what is
+  /// behind it, so under a pinned scheme the glyph takes that scheme's label
+  /// colour outright.
+  private func glyphStyle(_ style: PanelStyle) -> AnyShapeStyle {
+    switch style.glassScheme {
+    case .adaptive: AnyShapeStyle(.primary)
+    case .system: AnyShapeStyle(environmentScheme == .dark ? Color.white : .black)
+    case let .fixed(scheme): AnyShapeStyle(scheme == .dark ? Color.white : .black)
     }
-    .contentShape(Circle())
   }
 }
 
