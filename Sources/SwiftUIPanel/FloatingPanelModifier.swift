@@ -83,12 +83,32 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
   @State private var fittedHeight: CGFloat?
   @State private var toastHeight: CGFloat = 0
   @State private var keyboardExpansion = KeyboardExpansion()
-  /// The side a landscape iPhone's sensor housing is on; see `SensorHousingReader`.
-  @State private var sensorHousing: HorizontalEdge?
+  #if canImport(UIKit)
+  /// The container's corner radius and the side of any sensor housing; see `ContainerReader`.
+  @State private var container = ContainerReading()
+  #endif
   /// The button stack's buttons grow with the type size, and so does the room their corner needs.
   @ScaledMetric(relativeTo: .body) private var typeScale: CGFloat = 1
 
   private var style: PanelStyle { controller.style }
+
+  /// The radius of the container's corners, which panel corners stay concentric with.
+  private var containerCornerRadius: CGFloat {
+    #if canImport(UIKit)
+    container.cornerRadius
+    #else
+    ContainerCornerRadius.window
+    #endif
+  }
+
+  /// The side of a landscape iPhone's sensor housing, or nil.
+  private var sensorHousing: HorizontalEdge? {
+    #if canImport(UIKit)
+    container.sensorHousing
+    #else
+    nil
+    #endif
+  }
 
   func body(content: Content) -> some View {
     // The safe area, read twice: the outer reader sees the keyboard, the inner
@@ -121,7 +141,7 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
     }
     .frame(width: layout.container.width, height: layout.container.height)
     #if canImport(UIKit)
-    .background(SensorHousingReader { sensorHousing = $0 })
+    .background(ContainerReader { container = $0 })
     #endif
     .ignoresSafeArea()
     .environment(\.panelController, controller)
@@ -144,7 +164,7 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
     let mode = controller.layoutModeOverride ?? LayoutMode.resolve(width: container.width, style: style)
     let margin = style.edgeMargin(for: mode)
     let edge = EdgeInsets(margin: margin, clearing: safeArea)
-      .freeing(sideAwayFrom: sensorHousing, cornerRadius: ContainerCornerRadius.container,
+      .freeing(sideAwayFrom: sensorHousing, cornerRadius: containerCornerRadius,
                controlDiameter: style.buttonDiameter * typeScale, margin: margin)
 
     // A sheet floats one margin above the container's bottom edge rather than
@@ -201,6 +221,7 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
     // the margin, and edge-to-edge it matches the screen's own curvature.
     layout.panelCornerRadii = style.panelCornerRadii(
       ContainerCornerRadius.concentric(inset: min(layout.sheetLeadingInset, layout.sheetTrailingInset),
+                                       in: containerCornerRadius,
                                        fallback: style.cornerRadius),
       mode: layout.mode)
 
@@ -219,7 +240,8 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
     layout.panelSize = CGSize(width: layout.widths.clamped(panelWidth ?? style.panelWidth),
                               height: restingHeight(layout))
     layout.panelCornerRadii = style.panelCornerRadii(
-      ContainerCornerRadius.concentric(inset: layout.margin, fallback: style.cornerRadius),
+      ContainerCornerRadius.concentric(inset: layout.margin, in: containerCornerRadius,
+                                       fallback: style.cornerRadius),
       mode: layout.mode)
 
     guard controller.isPanelVisible else { return }
