@@ -306,12 +306,68 @@ struct PanelControllerTests {
                                      contentInsets: EdgeInsets(top: 0, leading: 356, bottom: 0, trailing: 0),
                                      panelFrame: panel, toastFrame: .zero,
                                      panelAlignedFrame: .zero, panelTrailingFrame: trailing,
-                                     freeSpaceOpacity: 0.25))
+                                     freeSpaceOpacity: 0.25,
+                                     edgeInsets: EdgeInsets(top: 12, leading: 62, bottom: 21, trailing: 44)))
     #expect(controller.layoutMode == .floatingCorner)
     #expect(controller.contentInsets.leading == 356)
     #expect(controller.panelFrame == panel)
     #expect(controller.panelTrailingFrame == trailing)
     #expect(controller.freeSpaceOpacity == 0.25)
+    #expect(controller.edgeInsets.trailing == 44)
+  }
+}
+
+@Suite("Corner clearance")
+struct CornerClearanceTests {
+
+  /// A landscape iPhone: a 62pt display radius, the safe area's 62pt on both sides, 21pt at the
+  /// bottom for the home indicator, none at the top, and a 12pt margin.
+  private let landscape = EdgeInsets(top: 12, leading: 62, bottom: 21, trailing: 62)
+
+  @Test("A control past the curve's reach needs only the margin")
+  func straightSide() {
+    #expect(CornerClearance(radius: 62, diameter: 36, fromEnd: 100, margin: 12).inset == 12)
+  }
+
+  @Test("A control in the corner clears the curve by the margin, concentrically")
+  func inTheCorner() {
+    let clearance = CornerClearance(radius: 62, diameter: 36, fromEnd: 12, margin: 12)
+    let inset = clearance.inset
+    // The control's centre sits exactly `margin` inside the curve.
+    let centre = CGPoint(x: inset + 18, y: 12 + 18)
+    let fromCurveCentre = hypot(62 - centre.x, 62 - centre.y)
+    #expect(abs(fromCurveCentre - (62 - 12 - 18)) < 0.001)
+    #expect(inset < 62)
+  }
+
+  @Test("No corner radius, or a radius too small to matter, leaves the margin")
+  func noCurve() {
+    #expect(CornerClearance(radius: 0, diameter: 36, fromEnd: 12, margin: 12).inset == 12)
+    #expect(CornerClearance(radius: 20, diameter: 36, fromEnd: 12, margin: 12).inset == 12)
+  }
+
+  @Test("Only the side away from the housing comes in")
+  func awayFromHousing() {
+    let freed = landscape.freeing(sideAwayFrom: .leading, cornerRadius: 62, controlDiameter: 36, margin: 12)
+    #expect(freed.leading == 62)
+    #expect(freed.trailing < 62)
+    #expect(freed.trailing >= 12)
+    let other = landscape.freeing(sideAwayFrom: .trailing, cornerRadius: 62, controlDiameter: 36, margin: 12)
+    #expect(other.trailing == 62)
+    #expect(other.leading == freed.trailing)
+  }
+
+  @Test("No housing on a side, or no known radius, changes nothing")
+  func unchanged() {
+    #expect(landscape.freeing(sideAwayFrom: nil, cornerRadius: 62, controlDiameter: 36, margin: 12) == landscape)
+    #expect(landscape.freeing(sideAwayFrom: .leading, cornerRadius: 0, controlDiameter: 36, margin: 12) == landscape)
+  }
+
+  @Test("A side already inside what the corner needs is never pushed out")
+  func neverOut() {
+    let portrait = EdgeInsets(top: 59, leading: 8, bottom: 34, trailing: 8)
+    let freed = portrait.freeing(sideAwayFrom: .leading, cornerRadius: 62, controlDiameter: 36, margin: 8)
+    #expect(freed == portrait)
   }
 }
 

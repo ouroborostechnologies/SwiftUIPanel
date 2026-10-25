@@ -189,6 +189,50 @@ extension EdgeInsets {
               bottom: max(safeArea.bottom, margin),
               trailing: max(safeArea.trailing, margin))
   }
+
+  /// These insets with the side opposite `housing` brought in to what the container's corners
+  /// need, for round controls of `controlDiameter` at the top and bottom of that side.
+  ///
+  /// A landscape iPhone gives both sides the same safe-area inset so content stays centred, but
+  /// only the side with the sensor housing needs it. The other side is clear apart from its two
+  /// rounded corners. Only ever brought in, never pushed out.
+  func freeing(sideAwayFrom housing: HorizontalEdge?, cornerRadius: CGFloat,
+               controlDiameter: CGFloat, margin: CGFloat) -> EdgeInsets {
+    guard let housing, cornerRadius > 0 else { return self }
+    let needed = max(
+      CornerClearance(radius: cornerRadius, diameter: controlDiameter, fromEnd: top, margin: margin).inset,
+      CornerClearance(radius: cornerRadius, diameter: controlDiameter, fromEnd: bottom, margin: margin).inset)
+    var insets = self
+    switch housing {
+    case .leading: insets.trailing = min(trailing, needed)
+    case .trailing: insets.leading = min(leading, needed)
+    }
+    return insets
+  }
+}
+
+/// How far in from a side of a rounded container a round control can sit and still clear the
+/// corner, keeping `margin` from the curve the way a concentric panel does.
+///
+/// `fromEnd` is the control's distance from the end of that side, the top or bottom edge. Past
+/// the curve's reach the side is straight, and the margin alone is enough.
+struct CornerClearance {
+
+  let radius: CGFloat
+  let diameter: CGFloat
+  let fromEnd: CGFloat
+  let margin: CGFloat
+
+  var inset: CGFloat {
+    let controlRadius = diameter / 2
+    // The furthest the control's centre may be from the curve's centre.
+    let reach = radius - margin - controlRadius
+    // How far along the side the centre is from the curve's centre.
+    let along = radius - (fromEnd + controlRadius)
+    guard reach > 0, along > 0 else { return margin }
+    let across = max(reach * reach - along * along, 0).squareRoot()
+    return max(margin, radius - across - controlRadius)
+  }
 }
 
 /// The two free-space containers the consumer fills, derived from the same

@@ -83,6 +83,10 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
   @State private var fittedHeight: CGFloat?
   @State private var toastHeight: CGFloat = 0
   @State private var keyboardExpansion = KeyboardExpansion()
+  /// The side a landscape iPhone's sensor housing is on; see `SensorHousingReader`.
+  @State private var sensorHousing: HorizontalEdge?
+  /// The button stack's buttons grow with the type size, and so does the room their corner needs.
+  @ScaledMetric(relativeTo: .body) private var typeScale: CGFloat = 1
 
   private var style: PanelStyle { controller.style }
 
@@ -116,6 +120,9 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
       placePanel(layout)
     }
     .frame(width: layout.container.width, height: layout.container.height)
+    #if canImport(UIKit)
+    .background(SensorHousingReader { sensorHousing = $0 })
+    #endif
     .ignoresSafeArea()
     .environment(\.panelController, controller)
     // Reported from outside the view update: writing observable state during
@@ -137,6 +144,8 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
     let mode = controller.layoutModeOverride ?? LayoutMode.resolve(width: container.width, style: style)
     let margin = style.edgeMargin(for: mode)
     let edge = EdgeInsets(margin: margin, clearing: safeArea)
+      .freeing(sideAwayFrom: sensorHousing, cornerRadius: ContainerCornerRadius.container,
+               controlDiameter: style.buttonDiameter * typeScale, margin: margin)
 
     // A sheet floats one margin above the container's bottom edge rather than
     // above the safe area, so its bottom gap reads the same as its sides; its
@@ -479,6 +488,7 @@ private struct ResolvedLayout {
   var geometry: ChromeGeometry {
     ChromeGeometry(layoutMode: mode, contentInsets: contentInsets, panelFrame: panelFrame,
                    toastFrame: toastFrame, panelAlignedFrame: alignedFrame,
-                   panelTrailingFrame: trailingFrame, freeSpaceOpacity: freeSpaceOpacity)
+                   panelTrailingFrame: trailingFrame, freeSpaceOpacity: freeSpaceOpacity,
+                   edgeInsets: edge)
   }
 }

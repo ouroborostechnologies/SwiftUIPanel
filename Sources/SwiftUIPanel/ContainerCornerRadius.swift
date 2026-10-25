@@ -17,14 +17,14 @@ enum ContainerCornerRadius {
   #if canImport(UIKit)
   /// Read once from a private `UIScreen` key, there being no public API. Zero
   /// — a square display, or the key going away — falls back to the style.
-  private static let container: CGFloat = {
+  static let container: CGFloat = {
     let key = ["_display", "Corner", "Radius"].joined()
     return (UIScreen.main.value(forKey: key) as? CGFloat) ?? 0
   }()
   #else
   /// AppKit exposes no window radius, so this tracks the system's window shape
   /// by eye, per major release.
-  private static let container: CGFloat = {
+  static let container: CGFloat = {
     if #available(macOS 26.0, *) { 26 } else { 11 }
   }()
   #endif

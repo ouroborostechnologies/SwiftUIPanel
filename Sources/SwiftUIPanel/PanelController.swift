@@ -95,6 +95,13 @@ public final class PanelController {
   ///     .opacity(panel.freeSpaceOpacity)
   /// ```
   public private(set) var freeSpaceOpacity: Double = 1
+  /// How far the package's chrome sits in from each edge of the container: the style's margin,
+  /// grown to clear the safe area. Lay your own chrome over the content on the same lines.
+  ///
+  /// It is not always the safe area plus a margin. A landscape iPhone reports the same side inset
+  /// on both sides, but only the side with the sensor housing needs it; on the other, the chrome
+  /// comes in only as far as the display's rounded corner requires.
+  public private(set) var edgeInsets: EdgeInsets = EdgeInsets()
 
   public init() {}
 
@@ -107,6 +114,7 @@ public final class PanelController {
     panelAlignedFrame = geometry.panelAlignedFrame
     panelTrailingFrame = geometry.panelTrailingFrame
     freeSpaceOpacity = geometry.freeSpaceOpacity
+    edgeInsets = geometry.edgeInsets
   }
 }
 
@@ -120,6 +128,7 @@ struct ChromeGeometry: Equatable {
   var panelAlignedFrame: CGRect
   var panelTrailingFrame: CGRect
   var freeSpaceOpacity: Double
+  var edgeInsets: EdgeInsets
 }
 
 private struct PanelControllerKey: EnvironmentKey {
