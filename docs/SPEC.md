@@ -180,13 +180,22 @@ whose controls are all it should show — drawing on the content behind it.
   available height, and following the content as it grows and shrinks with the
   style's animation. A focused sheet keeps its margins at any height — it is
   sized, not opened — so it never dissolves or dims the screen.
-- **Scrolling content is read, not asked.** A `List`, `Form`, or `ScrollView`
-  takes whatever height it is offered, so the slot reads the content size of the
-  first scroll view inside it and uses the ideal height of anything else. The
+- **Content is asked first, and read only when it cannot answer.** The slot
+  takes its content's ideal height, which a `ScrollView` gives as its content's.
+  A `List` or a `Form` takes whatever height it is offered and has no ideal
+  height, so for those the slot reads the content size of the first scroll view
+  inside it. Asked first because a reading can be stale: when focusing swaps the
+  content, the last one is of the scroll view that was there before, and fitting
+  to it moves the panel twice. The
   content size alone, not the scroll view's insets: those include whatever safe
   area it overlaps, which a springing sheet changes every frame — a fit that
   counted them would never settle. Past the cap, a scroll view scrolls and
   anything else is clipped.
+- **The bottom inset is the bar's, unless the style replaces it.** A focused
+  sheet pads its main slot by the same safe-area inset the bar slot clears the
+  home indicator with. `PanelStyle.focusedBottomInset` swaps that for a fixed
+  amount — zero, for content that pads all four of its own sides alike. The
+  wide panel has no such inset and ignores it.
 - **`detent` is untouched**, so clearing focus returns the panel to where it
   rested. The consumer's main-slot content keeps its identity across the change.
 
@@ -430,6 +439,7 @@ public struct PanelStyle: Sendable {
     public var edgeMarginRegular: CGFloat      // wide layouts
     public var surfaceSpacing: CGFloat         // between chrome surfaces
     public var buttonSpacing: CGFloat          // within the button stack
+    public var focusedBottomInset: CGFloat?    // under a focused sheet's content; nil = the bar's
 
     // Sizing
     public var buttonDiameter: CGFloat         // scaled by type size

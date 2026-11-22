@@ -146,8 +146,12 @@ struct FloatingPanelModifier<Main: View, Bar: View, ToastContent: View,
     .ignoresSafeArea()
     .environment(\.panelController, controller)
     // Reported from outside the view update: writing observable state during
-    // `body` is a runtime warning and a source of layout loops.
-    .onChange(of: layout.geometry, initial: true) { _, geometry in
+    // `body` is a runtime warning and a source of layout loops. A geometry
+    // change rather than `onChange`: this body runs inside a `GeometryReader`,
+    // during layout, and a change `onChange` sees there is acted on with the
+    // next update, not this one — so the last pass of a panel fitting itself
+    // went unreported, and the content stayed inset for the height before.
+    .onGeometryChange(for: ChromeGeometry.self) { _ in layout.geometry } action: { geometry in
       controller.report(geometry)
     }
     .onChange(of: isKeyboardDocked) { _, docked in

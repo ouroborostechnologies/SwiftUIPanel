@@ -3,11 +3,14 @@ import SwiftUI
 /// The panel's main slot. It fills whatever height the panel gives it — or,
 /// on a focused panel, takes the height its content asks for.
 ///
-/// Content that scrolls — a `List`, a `Form`, a `ScrollView` — has no height
-/// of its own to ask for: it takes whatever it is offered. So a fitted slot
-/// reads the content height of the first scroll view inside it, and falls back
-/// to the content's ideal height only when there is none. Either way it stops
-/// at `fittingHeight`; past that, a scroll view scrolls and anything else is
+/// A fitted slot asks its content for its ideal height first. A `ScrollView`
+/// answers with its content's; a `List` or a `Form` has no height of its own to
+/// ask for and answers zero, so for those the slot reads the content height of
+/// the first scroll view inside it instead. Asking first matters when focusing
+/// swaps the content: the last reading is of the scroll view that was there
+/// before, and fitting to it would size the panel for content already gone,
+/// then size it again once the new one reports. Either way it stops at
+/// `fittingHeight`; past that, a scroll view scrolls and anything else is
 /// clipped. A fitted slot's size never depends on the height it is offered, so
 /// the panel can be sized from it without the two chasing each other.
 ///
@@ -52,10 +55,10 @@ private struct MainSlotLayout: Layout {
       return proposal.replacingUnspecifiedDimensions(by: subview.sizeThatFits(.unspecified))
     }
     let ideal = subview.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
-    // A scroll view that has not reported yet has no ideal height at all.
-    // Holding the height it was offered keeps the panel still until it does,
-    // rather than collapsing it for a frame.
-    let height = scrollContentHeight ?? (ideal.height > 0 ? ideal.height : proposal.height ?? 0)
+    // A list that has not reported yet has no height at all. Holding the
+    // height it was offered keeps the panel still until it does, rather than
+    // collapsing it for a frame.
+    let height = ideal.height > 0 ? ideal.height : scrollContentHeight ?? proposal.height ?? 0
     return CGSize(width: proposal.width ?? ideal.width,
                   height: min(max(height, 0), max(fittingHeight, 0)))
   }

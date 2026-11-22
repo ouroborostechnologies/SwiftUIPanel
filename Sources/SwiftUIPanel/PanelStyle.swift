@@ -51,6 +51,12 @@ public struct PanelStyle: Sendable {
   /// Inside a surface, around the content it was given.
   public var surfacePaddingHorizontal: CGFloat = 12
   public var surfacePaddingVertical: CGFloat = 8
+  /// What a focused sheet leaves under its content. `nil` clears the safe area
+  /// the way the bar slot does, which on a phone is a band of empty surface
+  /// over the home indicator; a value replaces it, for content that pads
+  /// itself evenly on all four sides and would rather the bottom matched.
+  /// The sheet already floats its margin above the indicator, so zero is safe.
+  public var focusedBottomInset: CGFloat? = nil
 
   // MARK: Sizing
 

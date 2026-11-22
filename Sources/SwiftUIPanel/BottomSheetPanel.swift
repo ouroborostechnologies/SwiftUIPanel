@@ -12,7 +12,8 @@ struct BottomSheetPanel<Main: View, Bar: View>: View {
   let height: CGFloat
   let cornerRadii: RectangleCornerRadii
   /// Padding under the bar slot, keeping its content clear of the home
-  /// indicator the sheet floats over. Under the main slot when focused.
+  /// indicator the sheet floats over. Under the main slot when focused, unless
+  /// `PanelStyle.focusedBottomInset` replaces it.
   let barBottomInset: CGFloat
   let isFocused: Bool
   /// The tallest the sheet may fit itself to when focused.
@@ -36,8 +37,8 @@ struct BottomSheetPanel<Main: View, Bar: View>: View {
           .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { handleHeight = $0 }
       }
       VStack(spacing: 0) {
-        MainSlot(fittingHeight: isFocused ? max(maxHeight - barBottomInset, 0) : nil) { main }
-          .padding(.bottom, isFocused ? barBottomInset : 0)
+        MainSlot(fittingHeight: isFocused ? max(maxHeight - focusedBottomInset, 0) : nil) { main }
+          .padding(.bottom, isFocused ? focusedBottomInset : 0)
           .background { if isFocused { FittedHeightProbe(onChange: onFittedHeightChange) } }
         if !isFocused {
           bar
@@ -56,6 +57,11 @@ struct BottomSheetPanel<Main: View, Bar: View>: View {
     .onChange(of: handleHeight + barHeight, initial: true) { _, minimizedHeight in
       onBarHeightChange(minimizedHeight)
     }
+  }
+
+  /// Under the main slot while focused: the bar's inset, unless the style says otherwise.
+  private var focusedBottomInset: CGFloat {
+    style.focusedBottomInset ?? barBottomInset
   }
 
   private var handle: some View {

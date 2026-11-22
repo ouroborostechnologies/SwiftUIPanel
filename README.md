@@ -94,7 +94,8 @@ vertical resize all read them.
 all it should show — drawing on the map behind it, say. The bar slot and the resize handle go, and
 the panel takes the height its content asks for instead of a detent: no snapping, capped by the
 available height, and following the content as it grows and shrinks. Everything else is left to
-the content underneath.
+the content underneath. On a sheet, the content sits above the same home-indicator inset the bar
+does; `PanelStyle.focusedBottomInset` replaces it, for content that pads itself evenly.
 
 ```
   .half          focused
@@ -108,8 +109,9 @@ the content underneath.
 └────────────┘  └────────────┘
 ```
 
-Content that scrolls has no height of its own, so the panel reads the content height of the first
-`List`, `Form`, or `ScrollView` in the main slot, and the ideal height of anything else. The wide
+The panel takes the main slot's ideal height, which a `ScrollView` gives as its content's. A `List`
+or a `Form` has no height of its own, so for those it reads the content height of the first one in
+the main slot instead. The wide
 panel's width stays resizable, and `detent` is untouched, so clearing focus puts the panel back
 where it rested.
 
